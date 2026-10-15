@@ -110,6 +110,36 @@ BitShift demystifies how processors multiply binary numbers without requiring co
 
 ---
 
+## 🌐 Web Build and Deployment
+
+BitShift can be deployed as a static web application to any modern hosting platform (GitHub Pages, Vercel, Netlify, Cloudflare Pages):
+
+1. **Export the Web Production Bundle**:
+   ```bash
+   npm run build
+   ```
+   This invokes `expo export -p web` and compiles the complete React Native Web bundle into the `dist/` directory, including `dist/index.html` and static assets.
+
+2. **Preview the Production Web Build Locally**:
+   ```bash
+   npm run serve
+   ```
+   Or:
+   ```bash
+   npx serve dist
+   ```
+
+3. **Deploy to GitHub Pages**:
+   - The repository includes `.github/workflows/deploy.yml` which automatically builds and deploys `dist/` on pushes to `main`.
+   - In your GitHub repository settings, go to **Settings > Pages > Build and deployment**, and set **Source** to **GitHub Actions**.
+
+4. **Deploy to Vercel / Netlify**:
+   - Configuration files `vercel.json` and `netlify.toml` are included.
+   - Build Command: `npm run build`
+   - Output / Publish Directory: `dist`
+
+---
+
 ## 🔒 Security & Environment Notice
 
 - This application does not require external backend API keys or secrets.
