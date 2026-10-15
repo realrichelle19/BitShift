@@ -10,84 +10,25 @@ import {
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { COLORS, SHADOWS } from '../theme';
-
-// Generates steps for any Multiplicand × Multiplier (up to 4-bit multiplicand and multiplier)
-function generateMultiplicationSteps(mInit = 5, qInit = 3) {
-  const steps = [];
-  let a = 0;
-  let m = mInit;
-  let q = qInit;
-  const bitCount = 4;
-
-  for (let i = 0; i < bitCount; i++) {
-    const q0 = q & 1;
-    const aBefore = a;
-    const mBefore = m;
-    const qBefore = q;
-    let operation = '';
-    let appliedDelta = 0;
-
-    if (q0 === 1) {
-      a += m;
-      appliedDelta = m;
-      operation = `Add M (${m}) → A`;
-    } else {
-      appliedDelta = 0;
-      operation = `Skip Add (Q₀ = 0)`;
-    }
-
-    const aAfter = a;
-    const mShifted = m << 1;
-    const qShifted = q >> 1;
-
-    steps.push({
-      stepIndex: i + 1,
-      bitIndex: i,
-      q0,
-      aBefore,
-      aAfter,
-      appliedDelta,
-      mCurrent: mBefore,
-      qCurrent: qBefore,
-      mNext: mShifted,
-      qNext: qShifted,
-      operation,
-      desc:
-        q0 === 1
-          ? `Because least-significant bit Q₀ = 1, the ALU accumulated M (${mBefore}) directly into A (${aBefore} + ${mBefore} = ${aAfter}). Next shift will shift Q right and scale M left.`
-          : `Because least-significant bit Q₀ = 0, no addition is needed! Accumulator A holds at ${aAfter}. Next shift will shift Q right and scale M left.`,
-    });
-
-    // Advance for next cycle
-    m = mShifted;
-    q = qShifted;
-  }
-
-  return { steps, finalProduct: a };
-}
-
-function to8BitArray(num) {
-  const binary = (num & 0xff).toString(2).padStart(8, '0');
-  return binary.split('');
-}
-
-function to4BitArray(num) {
-  const binary = (num & 0xf).toString(2).padStart(4, '0');
-  return binary.split('');
-}
+import {
+  runShiftAndAddMultiplication,
+  to4BitArray,
+  to8BitArray,
+  toBinaryString,
+} from '../utils/multiplicationAlgorithm';
 
 export default function SimulatorScreen() {
-  const [multiplicandInput, setMultiplicandInput] = useState('5');
-  const [multiplierInput, setMultiplierInput] = useState('3');
+  const [multiplicandInput, setMultiplicandInput] = useState('3');
+  const [multiplierInput, setMultiplierInput] = useState('5');
   const [customOpen, setCustomOpen] = useState(false);
 
-  const [mVal, setMVal] = useState(5);
-  const [qVal, setQVal] = useState(3);
-  const [stepIndex, setStepIndex] = useState(0); // 0 = initial / step 1, 1 = step 2, etc.
+  const [mVal, setMVal] = useState(3);
+  const [qVal, setQVal] = useState(5);
+  const [stepIndex, setStepIndex] = useState(0); // 0 = cycle 1, 1 = cycle 2, 2 = cycle 3, 3 = cycle 4
   const [autoPlay, setAutoPlay] = useState(false);
   const timerRef = useRef(null);
 
-  const { steps, finalProduct } = generateMultiplicationSteps(mVal, qVal);
+  const { steps, finalA, finalQ, finalProduct } = runShiftAndAddMultiplication(mVal, qVal, 4);
   const totalSteps = steps.length;
   const currentStep = steps[stepIndex] || steps[0];
   const isCompleted = stepIndex >= totalSteps - 1;
@@ -103,7 +44,7 @@ export default function SimulatorScreen() {
           }
           return prev + 1;
         });
-      }, 1500);
+      }, 1800);
     } else {
       if (timerRef.current) clearInterval(timerRef.current);
     }
@@ -128,7 +69,7 @@ export default function SimulatorScreen() {
   const handleApplyCustom = () => {
     const m = parseInt(multiplicandInput, 10);
     const q = parseInt(multiplierInput, 10);
-    if (!isNaN(m) && !isNaN(q) && m > 0 && q > 0 && m <= 15 && q <= 15) {
+    if (!isNaN(m) && !isNaN(q) && m >= 0 && q >= 0 && m <= 15 && q <= 15) {
       setMVal(m);
       setQVal(q);
       setStepIndex(0);
@@ -137,20 +78,24 @@ export default function SimulatorScreen() {
     }
   };
 
-  // 8-bit representations
-  const aBits = to8BitArray(currentStep.aAfter);
-  const aHighNibble = aBits.slice(0, 4);
-  const aLowNibble = aBits.slice(4, 8);
+  // Bit representations for the active cycle
+  // Multiplicand is constant 4 bits
+  const mBits = to4BitArray(mVal);
 
-  const mBits = to8BitArray(currentStep.mCurrent);
-  const mHighNibble = mBits.slice(0, 4);
-  const mLowNibble = mBits.slice(4, 8);
+  // Accumulator bits (4 bits)
+  const aBeforeBits = to4BitArray(currentStep.aBefore);
+  const aAfterAddBits = to4BitArray(currentStep.aAfterAdd);
+  const aAfterShiftBits = to4BitArray(currentStep.aAfterShift);
 
-  const qBits = to4BitArray(currentStep.qCurrent);
+  // Multiplier bits (4 bits)
+  const qBeforeBits = to4BitArray(currentStep.qBefore);
+  const qAfterShiftBits = to4BitArray(currentStep.qAfterShift);
 
-  const aBeforeBitsStr = to8BitArray(currentStep.aBefore).join(' ');
-  const mBitsStr = to8BitArray(currentStep.mCurrent).join(' ');
-  const aAfterBitsStr = to8BitArray(currentStep.aAfter).join(' ');
+  // Carry bit (1 bit)
+  const cBit = currentStep.cAfterAdd;
+
+  // Final 8-bit product (A | Q)
+  const finalProductBits = to8BitArray(finalProduct);
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -162,12 +107,12 @@ export default function SimulatorScreen() {
               <Text style={styles.stepNumText}>{currentStep.stepIndex}</Text>
             </View>
             <Text style={styles.hudStepTitle}>
-              Step {currentStep.stepIndex} of {totalSteps}
+              Cycle {currentStep.stepIndex} of {totalSteps}
             </Text>
           </View>
           <View style={styles.cycleBadge}>
             <Text style={styles.cycleBadgeText}>
-              Cycle {currentStep.stepIndex}: {currentStep.operation}
+              {currentStep.operation} → Shift C-A-Q Right
             </Text>
           </View>
         </View>
@@ -195,7 +140,7 @@ export default function SimulatorScreen() {
                     !isPast && !isCur && styles.segmentTextPending,
                   ]}
                 >
-                  {isPast ? `Bit ${i} ✓` : isCur ? `Bit ${i} • Active` : `Bit ${i}`}
+                  {isPast ? `Cycle ${i + 1} ✓` : isCur ? `Cycle ${i + 1} • Active` : `Cycle ${i + 1}`}
                 </Text>
               </View>
             );
@@ -203,8 +148,101 @@ export default function SimulatorScreen() {
         </View>
       </View>
 
-      {/* 2. Live Hardware Register Dashboard */}
+      {/* 2. Combined C-A-Q Right-Shift Visual Pipeline */}
+      <View style={styles.card}>
+        <View style={styles.pipelineHeader}>
+          <View style={styles.dotTitleRow}>
+            <MaterialIcons name="trending-flat" size={18} color={COLORS.terracotta} />
+            <Text style={styles.pipelineTitle}>Combined C-A-Q Right Shift Pipeline</Text>
+          </View>
+          <View style={styles.pipelineDirectionPill}>
+            <MaterialIcons name="arrow-forward" size={14} color={COLORS.white} />
+            <Text style={styles.pipelineDirectionText}>SHIFT RIGHT » 1</Text>
+          </View>
+        </View>
+        <Text style={styles.pipelineSub}>
+          C (1 bit), A (4 bits), and Q (4 bits) shift right together. Carry C enters A MSB, A's LSB enters Q MSB, and Q₀ is discarded.
+        </Text>
+
+        {/* Register Flow Blocks */}
+        <View style={styles.pipelineBlocksRow}>
+          {/* C Register Block */}
+          <View style={styles.pipeRegBlock}>
+            <Text style={styles.pipeRegLabel}>C (Carry)</Text>
+            <View style={[styles.pipeCell, cBit === 1 && styles.pipeCellFlame]}>
+              <Text style={[styles.pipeCellText, cBit === 1 && styles.pipeCellTextFlame]}>
+                {cBit}
+              </Text>
+            </View>
+            <Text style={styles.pipeArrow}>↓ enters A[3]</Text>
+          </View>
+
+          <MaterialIcons name="arrow-forward" size={18} color={COLORS.terracotta} />
+
+          {/* A Register Block */}
+          <View style={styles.pipeRegBlock}>
+            <Text style={styles.pipeRegLabel}>A (Accumulator, 4-bit)</Text>
+            <View style={styles.pipeBitsRow}>
+              {aAfterShiftBits.map((b, idx) => (
+                <View key={idx} style={[styles.pipeCellSm, b === '1' && styles.pipeCellFlame]}>
+                  <Text style={[styles.pipeCellTextSm, b === '1' && styles.pipeCellTextFlame]}>
+                    {b}
+                  </Text>
+                </View>
+              ))}
+            </View>
+            <Text style={styles.pipeArrow}>A[0] → enters Q[3]</Text>
+          </View>
+
+          <MaterialIcons name="arrow-forward" size={18} color={COLORS.terracotta} />
+
+          {/* Q Register Block */}
+          <View style={styles.pipeRegBlock}>
+            <Text style={styles.pipeRegLabel}>Q (Multiplier, 4-bit)</Text>
+            <View style={styles.pipeBitsRow}>
+              {qAfterShiftBits.map((b, idx) => (
+                <View key={idx} style={[styles.pipeCellSm, b === '1' && styles.pipeCellNavy]}>
+                  <Text style={[styles.pipeCellTextSm, b === '1' && styles.pipeCellTextNavy]}>
+                    {b}
+                  </Text>
+                </View>
+              ))}
+            </View>
+            <Text style={styles.pipeArrowDiscard}>Q₀ discarded</Text>
+          </View>
+        </View>
+      </View>
+
+      {/* 3. Live Hardware Register Dashboard */}
       <View style={styles.dashboardSection}>
+        {/* Carry (C) Card */}
+        <View style={styles.card}>
+          <View style={styles.regCardHeader}>
+            <View style={styles.dotTitleRow}>
+              <View style={styles.flameDot} />
+              <Text style={styles.regCardTitle}>Carry Register (C)</Text>
+            </View>
+            <View style={styles.shiftBadgeNavy}>
+              <Text style={styles.shiftBadgeText}>
+                {cBit === 1 ? 'CARRY GENERATED (1)' : 'NO CARRY (0)'}
+              </Text>
+            </View>
+          </View>
+          <View style={styles.cMatrixRow}>
+            <View style={styles.bitCellCol}>
+              <Text style={styles.bitSubLabel}>Carry Out</Text>
+              <View style={[styles.bitCellBox, cBit === 1 ? styles.bitCellFlame : styles.bitCellDefault]}>
+                <Text style={[styles.bitCellNum, cBit === 1 ? styles.bitCellNumFlame : styles.bitCellNumDefault]}>
+                  {cBit}
+                </Text>
+              </View>
+            </View>
+            <Text style={styles.cDescText}>
+              Stores carry-out from ALU addition A + M. Moves into A's MSB (b3) during right shift.
+            </Text>
+          </View>
+        </View>
+
         {/* Accumulator (A) Card */}
         <View style={styles.card}>
           <View style={styles.regCardHeader}>
@@ -215,164 +253,51 @@ export default function SimulatorScreen() {
             <View style={styles.hexDecRow}>
               <View style={styles.hexPill}>
                 <Text style={styles.hexText}>
-                  Hex: 0x{currentStep.aAfter.toString(16).toUpperCase().padStart(2, '0')}
+                  Hex: 0x{currentStep.aAfterShift.toString(16).toUpperCase()}
                 </Text>
               </View>
               <View style={styles.decPill}>
-                <Text style={styles.decText}>Dec: {currentStep.aAfter}</Text>
+                <Text style={styles.decText}>Dec: {currentStep.aAfterShift}</Text>
               </View>
             </View>
           </View>
 
-          {/* 8-Bit Matrix with Nibble Divider */}
-          <View style={styles.matrix8BitRow}>
-            {/* High Nibble */}
-            <View style={styles.nibbleGrid}>
-              {aHighNibble.map((b, idx) => {
-                const bitNum = 7 - idx;
-                const isHigh = b === '1';
-                return (
-                  <View key={idx} style={styles.bitCellCol}>
-                    <Text style={styles.bitSubLabel}>b{bitNum}</Text>
-                    <View
-                      style={[
-                        styles.bitCellBox,
-                        isHigh ? styles.bitCellFlame : styles.bitCellDefault,
-                      ]}
-                    >
-                      <Text
-                        style={[
-                          styles.bitCellNum,
-                          isHigh ? styles.bitCellNumFlame : styles.bitCellNumDefault,
-                        ]}
-                      >
-                        {b}
-                      </Text>
-                    </View>
-                  </View>
-                );
-              })}
-            </View>
-
-            {/* Nibble Divider Bar */}
-            <View style={styles.nibbleDivider} />
-
-            {/* Low Nibble */}
-            <View style={styles.nibbleGrid}>
-              {aLowNibble.map((b, idx) => {
-                const bitNum = 3 - idx;
-                const isHigh = b === '1';
-                return (
-                  <View key={idx} style={styles.bitCellCol}>
-                    <Text
-                      style={[
-                        styles.bitSubLabel,
-                        isHigh && { color: COLORS.terracotta, fontWeight: '800' },
-                      ]}
-                    >
-                      b{bitNum}
+          {/* 4-Bit Matrix */}
+          <View style={styles.qGrid4}>
+            {aAfterShiftBits.map((b, idx) => {
+              const bitNum = 3 - idx;
+              const isHigh = b === '1';
+              return (
+                <View key={idx} style={styles.qCellCol}>
+                  <Text style={[styles.bitSubLabel, isHigh && { color: COLORS.terracotta, fontWeight: '800' }]}>
+                    b{bitNum}
+                  </Text>
+                  <View style={[styles.qCellBox, isHigh ? styles.qCellActive : styles.qCellDefault]}>
+                    <Text style={[styles.qCellNum, isHigh ? styles.qCellNumActive : styles.qCellNumDefault]}>
+                      {b}
                     </Text>
-                    <View
-                      style={[
-                        styles.bitCellBox,
-                        isHigh ? styles.bitCellFlame : styles.bitCellDefault,
-                      ]}
-                    >
-                      <Text
-                        style={[
-                          styles.bitCellNum,
-                          isHigh ? styles.bitCellNumFlame : styles.bitCellNumDefault,
-                        ]}
-                      >
-                        {b}
-                      </Text>
-                    </View>
                   </View>
-                );
-              })}
-            </View>
+                </View>
+              );
+            })}
           </View>
 
           <View style={styles.regCardFooter}>
             <Text style={styles.prevText}>
-              Previous State:{' '}
+              State Before Shift:{' '}
               <Text style={styles.boldObsidian}>
-                {to8BitArray(currentStep.aBefore).join('')} ({currentStep.aBefore})
+                {toBinaryString(currentStep.aAfterAdd, 4)} ({currentStep.aAfterAdd})
               </Text>
             </Text>
             <View style={styles.deltaBadge}>
               <Text style={styles.deltaText}>
-                {currentStep.appliedDelta > 0
-                  ? `+${currentStep.appliedDelta} Applied`
-                  : 'No Add (Shift Only)'}
+                {currentStep.addOccurred ? `+${mVal} (Add M)` : 'No Add (Skip)'}
               </Text>
             </View>
           </View>
         </View>
 
-        {/* Multiplicand (M) Card */}
-        <View style={styles.card}>
-          <View style={styles.regCardHeader}>
-            <View style={styles.dotTitleRow}>
-              <View style={styles.navyDot} />
-              <Text style={styles.regCardTitle}>Multiplicand (M)</Text>
-            </View>
-            <View style={styles.shiftBadgeNavy}>
-              <MaterialIcons name="arrow-back" size={13} color={COLORS.cardCream} />
-              <Text style={styles.shiftBadgeText}>
-                {stepIndex === 0 ? 'INITIAL: ' : `SHIFTED L${stepIndex}: `}
-                {currentStep.mCurrent}
-              </Text>
-            </View>
-          </View>
-
-          {/* 8-Bit Matrix */}
-          <View style={styles.matrix8BitRow}>
-            <View style={styles.nibbleGrid}>
-              {mHighNibble.map((b, idx) => (
-                <View key={idx} style={styles.bitCellBox}>
-                  <Text style={styles.bitCellNumDefault}>{b}</Text>
-                </View>
-              ))}
-            </View>
-            <View style={styles.nibbleDivider} />
-            <View style={styles.nibbleGrid}>
-              {mLowNibble.map((b, idx) => {
-                const isHigh = b === '1';
-                return (
-                  <View
-                    key={idx}
-                    style={[
-                      styles.bitCellBox,
-                      isHigh && {
-                        backgroundColor: COLORS.obsidian,
-                        borderColor: COLORS.obsidian,
-                      },
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.bitCellNumDefault,
-                        isHigh && { color: COLORS.white, fontWeight: '800' },
-                      ]}
-                    >
-                      {b}
-                    </Text>
-                  </View>
-                );
-              })}
-            </View>
-          </View>
-
-          <View style={styles.scaleRow}>
-            <Text style={styles.scaleText}>
-              Original: <Text style={styles.boldObsidian}>{mVal}</Text> • Scaled x
-              {Math.pow(2, stepIndex)}
-            </Text>
-          </View>
-        </View>
-
-        {/* Multiplier (Q) Card with Target Bit */}
+        {/* Multiplier (Q) Card with Target Bit Q0 */}
         <View style={styles.card}>
           <View style={styles.regCardHeader}>
             <View style={styles.dotTitleRow}>
@@ -387,33 +312,18 @@ export default function SimulatorScreen() {
             </View>
           </View>
 
-          {/* 4-Bit Grid */}
+          {/* 4-Bit Grid before shift */}
           <View style={styles.qGrid4}>
-            {qBits.map((b, idx) => {
+            {qBeforeBits.map((b, idx) => {
               const qBitNum = 3 - idx;
               const isQ0 = idx === 3;
               return (
                 <View key={idx} style={styles.qCellCol}>
-                  <Text
-                    style={[
-                      styles.bitSubLabel,
-                      isQ0 && { color: COLORS.terracotta, fontWeight: '800' },
-                    ]}
-                  >
-                    {isQ0 ? 'q0 (Active)' : `q${qBitNum}`}
+                  <Text style={[styles.bitSubLabel, isQ0 && { color: COLORS.terracotta, fontWeight: '800' }]}>
+                    {isQ0 ? 'Q₀ (Active)' : `q${qBitNum}`}
                   </Text>
-                  <View
-                    style={[
-                      styles.qCellBox,
-                      isQ0 ? styles.qCellActive : styles.qCellDefault,
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.qCellNum,
-                        isQ0 ? styles.qCellNumActive : styles.qCellNumDefault,
-                      ]}
-                    >
+                  <View style={[styles.qCellBox, isQ0 ? styles.qCellActive : styles.qCellDefault]}>
+                    <Text style={[styles.qCellNum, isQ0 ? styles.qCellNumActive : styles.qCellNumDefault]}>
                       {b}
                     </Text>
                   </View>
@@ -429,10 +339,67 @@ export default function SimulatorScreen() {
               );
             })}
           </View>
+
+          <View style={styles.regCardFooter}>
+            <Text style={styles.prevText}>
+              After Right Shift:{' '}
+              <Text style={styles.boldObsidian}>
+                {toBinaryString(currentStep.qAfterShift, 4)} ({currentStep.qAfterShift})
+              </Text>
+            </Text>
+            <View style={styles.shiftBadgeNavySm}>
+              <Text style={styles.shiftBadgeNavySmText}>Q » 1</Text>
+            </View>
+          </View>
+        </View>
+
+        {/* Multiplicand (M) Card (CONSTANT) */}
+        <View style={styles.card}>
+          <View style={styles.regCardHeader}>
+            <View style={styles.dotTitleRow}>
+              <View style={styles.navyDot} />
+              <Text style={styles.regCardTitle}>Multiplicand (M)</Text>
+            </View>
+            <View style={styles.constantBadge}>
+              <MaterialIcons name="lock" size={12} color={COLORS.obsidian} />
+              <Text style={styles.constantBadgeText}>CONSTANT: {mVal}</Text>
+            </View>
+          </View>
+
+          {/* 4-Bit Matrix */}
+          <View style={styles.qGrid4}>
+            {mBits.map((b, idx) => {
+              const isHigh = b === '1';
+              return (
+                <View key={idx} style={styles.qCellCol}>
+                  <Text style={styles.bitSubLabel}>m{3 - idx}</Text>
+                  <View
+                    style={[
+                      styles.qCellBox,
+                      isHigh && {
+                        backgroundColor: COLORS.obsidian,
+                        borderColor: COLORS.obsidian,
+                      },
+                    ]}
+                  >
+                    <Text style={[styles.qCellNumDefault, isHigh && { color: COLORS.white, fontWeight: '800' }]}>
+                      {b}
+                    </Text>
+                  </View>
+                </View>
+              );
+            })}
+          </View>
+
+          <View style={styles.scaleRow}>
+            <Text style={styles.scaleText}>
+              Multiplicand M is held unchanged in its register throughout all cycles.
+            </Text>
+          </View>
         </View>
       </View>
 
-      {/* 3. Interactive Binary Arithmetic Canvas (Deep Obsidian Navy #1E223D) */}
+      {/* 4. Interactive ALU Addition Scratchpad */}
       <View style={styles.scratchpadCard}>
         <View style={styles.scratchpadHeader}>
           <View style={styles.scratchpadTitleRow}>
@@ -440,17 +407,16 @@ export default function SimulatorScreen() {
             <Text style={styles.scratchpadTitle}>ALU Addition Scratchpad</Text>
           </View>
           <View style={styles.scratchpadPill}>
-            <Text style={styles.scratchpadPillText}>Accumulator + Multiplicand</Text>
+            <Text style={styles.scratchpadPillText}>Accumulator A + Multiplicand M</Text>
           </View>
         </View>
 
-        {/* Visual Arithmetic Matrix */}
         <View style={styles.scratchpadBody}>
           {/* Row 1: A */}
           <View style={styles.scratchpadRow}>
             <View style={styles.scratchpadLeft}>
               <Text style={styles.scratchpadLabel}>A:</Text>
-              <Text style={styles.scratchpadBits}>{aBeforeBitsStr}</Text>
+              <Text style={styles.scratchpadBits}>{aBeforeBits.join(' ')}</Text>
             </View>
             <Text style={styles.scratchpadDec}>(Dec: {currentStep.aBefore})</Text>
           </View>
@@ -460,7 +426,7 @@ export default function SimulatorScreen() {
             <View style={styles.scratchpadLeft}>
               <Text style={styles.scratchpadPlus}>+</Text>
               <Text style={styles.scratchpadBits}>
-                {currentStep.q0 === 1 ? mBitsStr : '0 0 0 0 0 0 0 0'}
+                {currentStep.q0 === 1 ? mBits.join(' ') : '0 0 0 0'}
               </Text>
             </View>
             <Text
@@ -469,29 +435,39 @@ export default function SimulatorScreen() {
                 currentStep.q0 === 1 && { color: COLORS.terracotta, fontWeight: '700' },
               ]}
             >
-              (Dec: {currentStep.q0 === 1 ? currentStep.mCurrent : 0})
+              (Dec: {currentStep.q0 === 1 ? mVal : 0})
             </Text>
           </View>
 
-          {/* Divider Bar */}
+          {/* Divider */}
           <View style={styles.scratchpadDivider} />
 
-          {/* Result Row */}
+          {/* Row 3: Result A and Carry C */}
           <View style={styles.scratchpadResultRow}>
             <View style={styles.scratchpadLeft}>
               <Text style={styles.scratchpadEquals}>=</Text>
-              <Text style={styles.scratchpadResultBits}>{aAfterBitsStr}</Text>
+              <Text style={styles.scratchpadResultBits}>
+                [C={cBit}] {aAfterAddBits.join(' ')}
+              </Text>
             </View>
             <View style={styles.scratchpadResultBadge}>
               <Text style={styles.scratchpadResultDec}>
-                (Dec: {currentStep.aAfter})
+                (Sum: {currentStep.aAfterAdd}, Carry: {cBit})
               </Text>
             </View>
+          </View>
+
+          {/* Shift Note */}
+          <View style={styles.scratchpadShiftNoteRow}>
+            <MaterialIcons name="sync-alt" size={14} color={COLORS.terracotta} />
+            <Text style={styles.scratchpadShiftNoteText}>
+              Next: Combined Right Shift of C ({cBit}) | A ({aAfterAddBits.join('')}) | Q ({qBeforeBits.join('')}) » 1
+            </Text>
           </View>
         </View>
       </View>
 
-      {/* 4. Step Operation Controller & Dynamic Insight */}
+      {/* 5. Step Operation Controller & Dynamic Insight */}
       <View style={styles.card}>
         <View style={styles.controlBtnRow}>
           <TouchableOpacity
@@ -547,7 +523,51 @@ export default function SimulatorScreen() {
         </View>
       </View>
 
-      {/* 5. Custom Multiplier Sandbox Trigger */}
+      {/* 6. Final Product Card (When all 4 cycles complete) */}
+      {isCompleted && (
+        <View style={styles.finalProductCard}>
+          <View style={styles.finalProductHeader}>
+            <MaterialIcons name="verified" size={24} color={COLORS.terracotta} />
+            <View>
+              <Text style={styles.finalProductTitle}>Multiplication Completed!</Text>
+              <Text style={styles.finalProductSub}>
+                Final Product = A | Q ({mVal} × {qVal} = {finalProduct})
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.finalProductBitsRow}>
+            <View style={styles.finalNibble}>
+              <Text style={styles.finalNibbleLabel}>Accumulator A</Text>
+              <Text style={styles.finalNibbleBits}>
+                {toBinaryString(finalA, 4)}
+              </Text>
+            </View>
+            <Text style={styles.finalDivider}>|</Text>
+            <View style={styles.finalNibble}>
+              <Text style={styles.finalNibbleLabel}>Multiplier Q</Text>
+              <Text style={styles.finalNibbleBits}>
+                {toBinaryString(finalQ, 4)}
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.finalSummaryRow}>
+            <Text style={styles.finalSummaryText}>
+              8-Bit Binary:{' '}
+              <Text style={{ color: COLORS.terracotta, fontWeight: '800' }}>
+                {finalProductBits.join('')}₂
+              </Text>{' '}
+              • Decimal:{' '}
+              <Text style={{ color: COLORS.white, fontWeight: '800' }}>
+                {finalProduct}₁₀
+              </Text>
+            </Text>
+          </View>
+        </View>
+      )}
+
+      {/* 7. Custom Multiplier Sandbox Trigger */}
       <View style={styles.customCard}>
         <View style={styles.customHeader}>
           <View style={styles.customLeft}>
@@ -555,8 +575,8 @@ export default function SimulatorScreen() {
               <MaterialIcons name="tune" size={20} color={COLORS.white} />
             </View>
             <View>
-              <Text style={styles.customTitle}>Custom Multiplier</Text>
-              <Text style={styles.customSub}>Try other factors like 6 × 7</Text>
+              <Text style={styles.customTitle}>Custom Multiplier Sandbox</Text>
+              <Text style={styles.customSub}>Try other factors like 7 × 3 or 15 × 15</Text>
             </View>
           </View>
           <TouchableOpacity
@@ -574,7 +594,7 @@ export default function SimulatorScreen() {
           <View style={styles.customInputsArea}>
             <View style={styles.inputRow}>
               <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Multiplicand (1-15):</Text>
+                <Text style={styles.inputLabel}>Multiplicand (0-15):</Text>
                 <TextInput
                   style={styles.textInput}
                   keyboardType="numeric"
@@ -584,7 +604,7 @@ export default function SimulatorScreen() {
                 />
               </View>
               <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Multiplier (1-15):</Text>
+                <Text style={styles.inputLabel}>Multiplier (0-15):</Text>
                 <TextInput
                   style={styles.textInput}
                   keyboardType="numeric"
@@ -600,14 +620,12 @@ export default function SimulatorScreen() {
               onPress={handleApplyCustom}
               activeOpacity={0.8}
             >
-              <Text style={styles.applyBtnText}>Apply & Run Simulator</Text>
-              <MaterialIcons name="play-arrow" size={18} color={COLORS.white} />
+              <MaterialIcons name="check" size={16} color={COLORS.white} />
+              <Text style={styles.applyBtnText}>Apply Custom Operands</Text>
             </TouchableOpacity>
           </View>
         )}
       </View>
-
-      <View style={{ height: 24 }} />
     </ScrollView>
   );
 }
@@ -619,21 +637,24 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: 16,
+    paddingBottom: 40,
     gap: 14,
   },
   card: {
     backgroundColor: COLORS.cardCream,
-    borderWidth: 1.5,
-    borderColor: COLORS.cardBorder,
     borderRadius: 16,
     padding: 16,
-    ...SHADOWS.subtleCard,
+    borderWidth: 1.5,
+    borderColor: COLORS.cardBorder,
     gap: 12,
+    ...SHADOWS.subtleCard,
   },
   hudHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 8,
   },
   hudStepBadgeRow: {
     flexDirection: 'row',
@@ -643,16 +664,15 @@ const styles = StyleSheet.create({
   stepNumPill: {
     width: 24,
     height: 24,
-    borderRadius: 12,
-    backgroundColor: COLORS.obsidian,
+    borderRadius: 6,
+    backgroundColor: COLORS.terracotta,
     alignItems: 'center',
     justifyContent: 'center',
   },
   stepNumText: {
-    color: COLORS.cardCream,
+    color: COLORS.white,
     fontSize: 12,
     fontWeight: '800',
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
   },
   hudStepTitle: {
     fontSize: 15,
@@ -660,51 +680,46 @@ const styles = StyleSheet.create({
     color: COLORS.obsidian,
   },
   cycleBadge: {
-    backgroundColor: 'rgba(245, 79, 27, 0.1)',
+    backgroundColor: COLORS.cardCreamAlt,
     borderWidth: 1,
-    borderColor: 'rgba(245, 79, 27, 0.3)',
-    paddingHorizontal: 10,
-    paddingVertical: 3,
-    borderRadius: 16,
+    borderColor: COLORS.cardBorder,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
   },
   cycleBadgeText: {
-    color: COLORS.terracotta,
     fontSize: 11,
-    fontWeight: '800',
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    fontWeight: '700',
+    color: COLORS.obsidian,
   },
   segmentTrackRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     gap: 6,
+    marginTop: 4,
   },
   segmentCol: {
     flex: 1,
     gap: 4,
   },
   segmentBar: {
-    height: 8,
-    borderRadius: 4,
+    height: 6,
+    borderRadius: 3,
   },
   segmentBarDone: {
-    backgroundColor: COLORS.obsidian,
+    backgroundColor: COLORS.success,
   },
   segmentBarActive: {
     backgroundColor: COLORS.terracotta,
   },
   segmentBarPending: {
-    backgroundColor: COLORS.surfaceHigh,
-    borderWidth: 0.5,
-    borderColor: COLORS.cardBorder,
+    backgroundColor: 'rgba(30, 34, 61, 0.1)',
   },
   segmentText: {
     fontSize: 10,
-    textAlign: 'center',
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    fontWeight: '600',
   },
   segmentTextDone: {
-    color: COLORS.obsidian,
-    fontWeight: '700',
+    color: COLORS.success,
   },
   segmentTextActive: {
     color: COLORS.terracotta,
@@ -712,15 +727,13 @@ const styles = StyleSheet.create({
   },
   segmentTextPending: {
     color: COLORS.textMuted,
-    fontWeight: '500',
   },
-  dashboardSection: {
-    gap: 12,
-  },
-  regCardHeader: {
+  pipelineHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 8,
   },
   dotTitleRow: {
     flexDirection: 'row',
@@ -728,19 +741,130 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   flameDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
     backgroundColor: COLORS.terracotta,
   },
   navyDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
     backgroundColor: COLORS.obsidian,
   },
+  pipelineTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: COLORS.obsidian,
+  },
+  pipelineDirectionPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: COLORS.terracotta,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  pipelineDirectionText: {
+    color: COLORS.white,
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  pipelineSub: {
+    fontSize: 12,
+    color: COLORS.textMuted,
+    lineHeight: 17,
+  },
+  pipelineBlocksRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: COLORS.cardCreamAlt,
+    borderRadius: 12,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: COLORS.cardBorder,
+  },
+  pipeRegBlock: {
+    alignItems: 'center',
+    gap: 4,
+  },
+  pipeRegLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: COLORS.obsidian,
+  },
+  pipeBitsRow: {
+    flexDirection: 'row',
+    gap: 3,
+  },
+  pipeCell: {
+    width: 28,
+    height: 28,
+    borderRadius: 6,
+    backgroundColor: COLORS.pageBg,
+    borderWidth: 1,
+    borderColor: COLORS.cardBorder,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pipeCellSm: {
+    width: 22,
+    height: 26,
+    borderRadius: 4,
+    backgroundColor: COLORS.pageBg,
+    borderWidth: 1,
+    borderColor: COLORS.cardBorder,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pipeCellFlame: {
+    backgroundColor: COLORS.terracotta,
+    borderColor: COLORS.terracotta,
+  },
+  pipeCellNavy: {
+    backgroundColor: COLORS.obsidian,
+    borderColor: COLORS.obsidian,
+  },
+  pipeCellText: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: COLORS.obsidian,
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+  },
+  pipeCellTextSm: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: COLORS.obsidian,
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+  },
+  pipeCellTextFlame: {
+    color: COLORS.white,
+  },
+  pipeCellTextNavy: {
+    color: COLORS.white,
+  },
+  pipeArrow: {
+    fontSize: 9,
+    fontWeight: '600',
+    color: COLORS.terracotta,
+  },
+  pipeArrowDiscard: {
+    fontSize: 9,
+    fontWeight: '600',
+    color: '#BA1A1A',
+  },
+  dashboardSection: {
+    gap: 14,
+  },
+  regCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
   regCardTitle: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '800',
     color: COLORS.obsidian,
   },
@@ -752,245 +876,248 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.cardCreamAlt,
     borderWidth: 1,
     borderColor: COLORS.cardBorder,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
   },
   hexText: {
     fontSize: 11,
     fontWeight: '700',
-    color: COLORS.textMuted,
+    color: COLORS.obsidian,
     fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
   },
   decPill: {
     backgroundColor: COLORS.terracotta,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
   },
   decText: {
     fontSize: 11,
     fontWeight: '800',
     color: COLORS.white,
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
   },
-  matrix8BitRow: {
+  cMatrixRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    paddingVertical: 2,
+    gap: 14,
   },
-  nibbleGrid: {
+  cDescText: {
     flex: 1,
-    flexDirection: 'row',
-    gap: 4,
-  },
-  nibbleDivider: {
-    width: 3,
-    height: 24,
-    backgroundColor: COLORS.cardBorder,
-    borderRadius: 2,
+    fontSize: 12,
+    color: COLORS.textMuted,
+    lineHeight: 16,
   },
   bitCellCol: {
-    flex: 1,
     alignItems: 'center',
-    gap: 2,
+    gap: 4,
   },
   bitSubLabel: {
-    fontSize: 9,
+    fontSize: 10,
+    fontWeight: '600',
     color: COLORS.textMuted,
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
   },
   bitCellBox: {
-    width: '100%',
+    width: 38,
     height: 38,
-    borderRadius: 6,
+    borderRadius: 8,
+    borderWidth: 1.5,
+    borderColor: COLORS.cardBorder,
     alignItems: 'center',
     justifyContent: 'center',
   },
   bitCellDefault: {
     backgroundColor: COLORS.cardCreamAlt,
-    borderWidth: 1,
-    borderColor: COLORS.cardBorder,
   },
   bitCellFlame: {
     backgroundColor: COLORS.terracotta,
-    borderWidth: 1,
-    borderColor: COLORS.terracottaDark,
-    ...SHADOWS.hardFlame,
+    borderColor: COLORS.terracotta,
   },
   bitCellNum: {
-    fontSize: 15,
+    fontSize: 16,
+    fontWeight: '800',
     fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
   },
   bitCellNumDefault: {
-    color: COLORS.textMuted,
-    fontWeight: '700',
+    color: COLORS.obsidian,
   },
   bitCellNumFlame: {
     color: COLORS.white,
-    fontWeight: '900',
-  },
-  regCardFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingTop: 2,
-  },
-  prevText: {
-    fontSize: 11,
-    color: COLORS.textMuted,
-  },
-  boldObsidian: {
-    color: COLORS.obsidian,
-    fontWeight: '800',
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-  },
-  deltaBadge: {
-    backgroundColor: 'rgba(245, 79, 27, 0.1)',
-    borderWidth: 1,
-    borderColor: 'rgba(245, 79, 27, 0.3)',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 6,
-  },
-  deltaText: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: COLORS.terracotta,
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-  },
-  shiftBadgeNavy: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: COLORS.obsidian,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-    gap: 4,
-  },
-  shiftBadgeText: {
-    color: COLORS.cardCream,
-    fontSize: 10,
-    fontWeight: '800',
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-  },
-  scaleRow: {
-    alignItems: 'flex-end',
-  },
-  scaleText: {
-    fontSize: 11,
-    color: COLORS.textMuted,
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-  },
-  targetBadgeFlame: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: COLORS.terracotta,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 16,
-    gap: 4,
-  },
-  targetBadgeText: {
-    color: COLORS.white,
-    fontSize: 10,
-    fontWeight: '800',
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
   },
   qGrid4: {
     flexDirection: 'row',
-    gap: 8,
-    paddingVertical: 2,
+    justifyContent: 'space-around',
+    paddingVertical: 4,
   },
   qCellCol: {
-    flex: 1,
     alignItems: 'center',
-    gap: 2,
+    gap: 4,
   },
   qCellBox: {
-    width: '100%',
-    height: 42,
-    borderRadius: 8,
+    width: 44,
+    height: 44,
+    borderRadius: 10,
+    borderWidth: 1.5,
     alignItems: 'center',
     justifyContent: 'center',
   },
   qCellDefault: {
     backgroundColor: COLORS.cardCreamAlt,
-    borderWidth: 1,
     borderColor: COLORS.cardBorder,
   },
   qCellActive: {
     backgroundColor: COLORS.terracotta,
-    borderWidth: 2,
-    borderColor: COLORS.terracottaDark,
+    borderColor: COLORS.terracotta,
     ...SHADOWS.hardFlame,
   },
   qCellNum: {
-    fontSize: 16,
+    fontSize: 18,
+    fontWeight: '800',
     fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
   },
   qCellNumDefault: {
-    color: COLORS.textMuted,
-    fontWeight: '700',
+    color: COLORS.obsidian,
   },
   qCellNumActive: {
     color: COLORS.white,
-    fontWeight: '900',
+  },
+  regCardFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderTopWidth: 1,
+    borderTopColor: COLORS.cardBorder,
+    paddingTop: 8,
+  },
+  prevText: {
+    fontSize: 12,
+    color: COLORS.textMuted,
+  },
+  boldObsidian: {
+    color: COLORS.obsidian,
+    fontWeight: '800',
+  },
+  deltaBadge: {
+    backgroundColor: COLORS.cardCreamAlt,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: COLORS.cardBorder,
+  },
+  deltaText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: COLORS.terracotta,
+  },
+  shiftBadgeNavy: {
+    backgroundColor: COLORS.obsidian,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  shiftBadgeText: {
+    color: COLORS.white,
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  shiftBadgeNavySm: {
+    backgroundColor: COLORS.obsidian,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  shiftBadgeNavySmText: {
+    color: COLORS.white,
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  targetBadgeFlame: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: COLORS.terracotta,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  targetBadgeText: {
+    color: COLORS.white,
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  constantBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: COLORS.cardCreamAlt,
+    borderWidth: 1,
+    borderColor: COLORS.cardBorder,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  constantBadgeText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: COLORS.obsidian,
+  },
+  scaleRow: {
+    borderTopWidth: 1,
+    borderTopColor: COLORS.cardBorder,
+    paddingTop: 8,
+  },
+  scaleText: {
+    fontSize: 12,
+    color: COLORS.textMuted,
   },
   scratchpadCard: {
     backgroundColor: COLORS.obsidian,
     borderRadius: 16,
     padding: 16,
-    gap: 10,
     borderWidth: 1.5,
     borderColor: COLORS.primaryContainer,
-    ...SHADOWS.hardInk,
+    gap: 12,
+    ...SHADOWS.subtleCard,
   },
   scratchpadHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
-    paddingBottom: 8,
+    flexWrap: 'wrap',
+    gap: 8,
   },
   scratchpadTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 8,
   },
   scratchpadTitle: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '800',
     color: COLORS.cardCream,
   },
   scratchpadPill: {
-    backgroundColor: 'rgba(245, 79, 27, 0.15)',
-    borderWidth: 1,
-    borderColor: 'rgba(245, 79, 27, 0.3)',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
     paddingHorizontal: 8,
-    paddingVertical: 2,
+    paddingVertical: 3,
     borderRadius: 6,
   },
   scratchpadPillText: {
-    color: COLORS.terracotta,
-    fontSize: 10,
-    fontWeight: '700',
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    fontSize: 11,
+    color: COLORS.cardCream,
+    fontWeight: '600',
   },
   scratchpadBody: {
+    backgroundColor: 'rgba(0, 0, 0, 0.25)',
+    borderRadius: 10,
+    padding: 12,
     gap: 6,
-    paddingTop: 2,
   },
   scratchpadRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
   },
   scratchpadLeft: {
     flexDirection: 'row',
@@ -998,69 +1125,76 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   scratchpadLabel: {
-    color: 'rgba(250, 243, 232, 0.6)',
+    fontSize: 13,
     fontWeight: '800',
-    width: 18,
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    color: COLORS.cardCream,
+    width: 22,
   },
   scratchpadPlus: {
+    fontSize: 14,
+    fontWeight: '800',
     color: COLORS.terracotta,
-    fontWeight: '900',
-    width: 18,
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-  },
-  scratchpadEquals: {
-    color: COLORS.terracotta,
-    fontWeight: '900',
-    width: 18,
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    width: 22,
   },
   scratchpadBits: {
+    fontSize: 15,
+    fontWeight: '800',
     color: COLORS.cardCream,
-    fontSize: 13,
-    letterSpacing: 2,
     fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    letterSpacing: 2,
   },
   scratchpadDec: {
-    color: 'rgba(250, 243, 232, 0.6)',
     fontSize: 11,
+    color: 'rgba(250, 243, 232, 0.6)',
     fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
   },
   scratchpadDivider: {
     height: 1.5,
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    borderRadius: 1,
-    marginVertical: 2,
+    marginVertical: 4,
   },
   scratchpadResultRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: 'rgba(245, 79, 27, 0.2)',
-    borderWidth: 1,
-    borderColor: 'rgba(245, 79, 27, 0.4)',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
+  },
+  scratchpadEquals: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: COLORS.terracotta,
+    width: 22,
   },
   scratchpadResultBits: {
-    color: COLORS.white,
-    fontSize: 13,
+    fontSize: 15,
     fontWeight: '800',
-    letterSpacing: 2,
+    color: COLORS.cardCream,
     fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    letterSpacing: 2,
   },
   scratchpadResultBadge: {
     backgroundColor: COLORS.terracotta,
     paddingHorizontal: 8,
     paddingVertical: 2,
-    borderRadius: 6,
+    borderRadius: 4,
   },
   scratchpadResultDec: {
-    color: COLORS.white,
     fontSize: 11,
     fontWeight: '800',
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    color: COLORS.white,
+  },
+  scratchpadShiftNoteRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 6,
+    paddingTop: 6,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  scratchpadShiftNoteText: {
+    fontSize: 11,
+    color: COLORS.cardCream,
+    lineHeight: 15,
   },
   controlBtnRow: {
     flexDirection: 'row',
@@ -1084,7 +1218,7 @@ const styles = StyleSheet.create({
     color: COLORS.obsidian,
   },
   autoBtn: {
-    flex: 1,
+    flex: 1.2,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1092,11 +1226,10 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 12,
     gap: 4,
-    ...SHADOWS.subtleCard,
   },
   autoBtnText: {
     fontSize: 13,
-    fontWeight: '700',
+    fontWeight: '800',
     color: COLORS.cardCream,
   },
   nextBtn: {
@@ -1137,6 +1270,69 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: COLORS.textMuted,
     lineHeight: 18,
+  },
+  finalProductCard: {
+    backgroundColor: COLORS.obsidian,
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1.5,
+    borderColor: COLORS.terracotta,
+    gap: 12,
+    ...SHADOWS.hardFlame,
+  },
+  finalProductHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  finalProductTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: COLORS.white,
+  },
+  finalProductSub: {
+    fontSize: 12,
+    color: 'rgba(250, 243, 232, 0.7)',
+  },
+  finalProductBitsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+    borderRadius: 10,
+    padding: 12,
+  },
+  finalNibble: {
+    alignItems: 'center',
+    gap: 4,
+  },
+  finalNibbleLabel: {
+    fontSize: 11,
+    color: 'rgba(250, 243, 232, 0.7)',
+    fontWeight: '600',
+  },
+  finalNibbleBits: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: COLORS.white,
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    letterSpacing: 3,
+  },
+  finalDivider: {
+    fontSize: 24,
+    color: COLORS.terracotta,
+    fontWeight: '800',
+  },
+  finalSummaryRow: {
+    alignItems: 'center',
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255, 255, 255, 0.15)',
+    paddingTop: 8,
+  },
+  finalSummaryText: {
+    fontSize: 13,
+    color: COLORS.cardCream,
   },
   customCard: {
     backgroundColor: COLORS.obsidian,

@@ -14,42 +14,67 @@ const SIMULATION_STATES = [
   {
     cycle: 'Cycle: 1 of 4',
     action: 'Q₀ is 1 → ADD M to A',
-    desc: 'Initial: Q=0011 (3), M=00000101 (5). Q₀=1, so A becomes 5 (0+5).',
-    mVal: 'Value: 5',
-    mBits: ['0', '0', '0', '0', '0', '1', '0', '1'],
-    qVal: 'Value: 3',
-    qBits: ['0', '0', '1', '1'],
-    accumulator: '0000 0101 (5)',
+    desc: 'Initial: M=0011 (3), Q=0101 (5), C=0, A=0000. Q₀=1, so A = 0 + 3 = 0011, C=0. Shift C-A-Q right: C(0)→A[3], A[0]→Q[3]. New A=0001, Q=1010.',
+    cBit: '0',
+    aBits: ['0', '0', '0', '1'],
+    aVal: '0001 (1)',
+    qBits: ['1', '0', '1', '0'],
+    qVal: '1010 (10)',
+    mBits: ['0', '0', '1', '1'],
+    mVal: '0011 (3, Constant)',
+    operation: 'Add M (3) + Right Shift C-A-Q',
   },
   {
     cycle: 'Cycle: 2 of 4',
-    action: 'Shifted & Q₀ is 1 → ADD M',
-    desc: 'M shifted LEFT to 10 (00001010). Q shifted RIGHT to 1 (0001). Q₀=1! A = 5 + 10 = 15.',
-    mVal: 'Value: 10 (Left Shifted)',
-    mBits: ['0', '0', '0', '0', '1', '0', '1', '0'],
-    qVal: 'Value: 1 (Right Shifted)',
-    qBits: ['0', '0', '0', '1'],
-    accumulator: '0000 1111 (15)',
+    action: 'Q₀ is 0 → SKIP ADD',
+    desc: 'Q=1010, so Q₀=0. Addition is bypassed! Shift C-A-Q right: C(0)→A[3], A[0]→Q[3]. New A=0000, Q=1101.',
+    cBit: '0',
+    aBits: ['0', '0', '0', '0'],
+    aVal: '0000 (0)',
+    qBits: ['1', '1', '0', '1'],
+    qVal: '1101 (13)',
+    mBits: ['0', '0', '1', '1'],
+    mVal: '0011 (3, Constant)',
+    operation: 'Bypass Add + Right Shift C-A-Q',
   },
   {
     cycle: 'Cycle: 3 of 4',
-    action: 'Shifted & Q₀ is 0 → SKIP ADD',
-    desc: 'M shifted to 20 (00010100). Q shifted to 0 (0000). Q₀=0! Skip add, sum holds at 15.',
-    mVal: 'Value: 20 (Left Shifted)',
-    mBits: ['0', '0', '0', '1', '0', '1', '0', '0'],
-    qVal: 'Value: 0 (Right Shifted)',
-    qBits: ['0', '0', '0', '0'],
-    accumulator: '0000 1111 (15)',
+    action: 'Q₀ is 1 → ADD M to A',
+    desc: 'Q=1101, so Q₀=1. Add M: A = 0 + 3 = 0011, C=0. Shift C-A-Q right: C(0)→A[3], A[0]→Q[3]. New A=0001, Q=1110.',
+    cBit: '0',
+    aBits: ['0', '0', '0', '1'],
+    aVal: '0001 (1)',
+    qBits: ['1', '1', '1', '0'],
+    qVal: '1110 (14)',
+    mBits: ['0', '0', '1', '1'],
+    mVal: '0011 (3, Constant)',
+    operation: 'Add M (3) + Right Shift C-A-Q',
   },
   {
-    cycle: 'Cycle: Completed!',
-    action: 'Final Product Verified: 15',
-    desc: 'Multiplier Q is exhausted (0000). Final Accumulator = 15 (00001111₂). 5 × 3 = 15!',
-    mVal: 'Value: 40 (Final)',
-    mBits: ['0', '0', '1', '0', '1', '0', '0', '0'],
-    qVal: 'Value: 0 (Done)',
-    qBits: ['0', '0', '0', '0'],
-    accumulator: '0000 1111 (15)',
+    cycle: 'Cycle: 4 of 4',
+    action: 'Q₀ is 0 → SKIP ADD',
+    desc: 'Q=1110, so Q₀=0. Addition is bypassed. Shift C-A-Q right: C(0)→A[3], A[0]→Q[3]. New A=0000, Q=1111.',
+    cBit: '0',
+    aBits: ['0', '0', '0', '0'],
+    aVal: '0000 (0)',
+    qBits: ['1', '1', '1', '1'],
+    qVal: '1111 (15)',
+    mBits: ['0', '0', '1', '1'],
+    mVal: '0011 (3, Constant)',
+    operation: 'Bypass Add + Right Shift C-A-Q',
+  },
+  {
+    cycle: 'Completed!',
+    action: 'Final Product = A | Q = 15',
+    desc: 'All 4 cycles complete! Multiplier Q exhausted. Accumulator A holds high nibble (0000), Multiplier Q holds low nibble (1111). Final Product A-Q = 00001111₂ = 15₁₀ (3 × 5 = 15).',
+    cBit: '0',
+    aBits: ['0', '0', '0', '0'],
+    aVal: '0000 (Upper 4 bits)',
+    qBits: ['1', '1', '1', '1'],
+    qVal: '1111 (Lower 4 bits)',
+    mBits: ['0', '0', '1', '1'],
+    mVal: '0011 (3, Constant)',
+    operation: 'Product = A-Q = 00001111₂ (15₁₀)',
   },
 ];
 
@@ -133,17 +158,15 @@ export default function LearnScreen({ playerName = 'Student', onNavigateToSimula
           <Text style={styles.cardTitle}>Mission Briefing: How Computers Multiply</Text>
         </View>
         <Text style={styles.bodyText}>
-          CPUs cannot natively perform grade-school long multiplication in one step.
-          Instead, they harness the elegance of binary base-2: every left shift is a
-          multiplication by <Text style={styles.boldTerracotta}>2</Text>, and checking
-          digits is just reading the lowest bit!
+          CPUs multiply binary numbers sequentially using an adder and shift registers.
+          Instead of scaling the multiplicand, the hardware holds <Text style={styles.boldObsidian}>Multiplicand M constant</Text> and shifts the combined register group <Text style={styles.boldTerracotta}>C-A-Q RIGHT</Text> by 1 bit in every cycle!
         </Text>
 
         {/* Base 10 vs Base 2 Side-by-side Logic Matrix */}
         <View style={styles.matrixContainer}>
           <View style={styles.matrixBoxLight}>
             <View style={styles.matrixBoxHeader}>
-              <Text style={styles.matrixBoxTitle}>HUMAN DECIMAL MENTAL MODEL</Text>
+              <Text style={styles.matrixBoxTitle}>HUMAN DECIMAL MODEL</Text>
               <Text style={styles.basePillLight}>Base 10</Text>
             </View>
             <Text style={styles.matrixCode}>
@@ -156,24 +179,49 @@ export default function LearnScreen({ playerName = 'Student', onNavigateToSimula
 
           <View style={styles.matrixBoxDark}>
             <View style={styles.matrixBoxHeader}>
-              <Text style={styles.matrixBoxTitleDark}>ALU BINARY POWERS-OF-2</Text>
+              <Text style={styles.matrixBoxTitleDark}>ALU RIGHT-SHIFT HARDWARE</Text>
               <Text style={styles.basePillDark}>Base 2</Text>
             </View>
             <Text style={styles.matrixCodeDark}>
-              0101₂ × 0011₂ = (5 × 2¹) + (5 × 2⁰) ={' '}
-              <Text style={styles.boldTerracottaLight}>10</Text> +{' '}
-              <Text style={styles.boldTerracottaLight}>5</Text> ={' '}
-              <Text style={styles.highlightProduct}>15</Text>
+              3 × 5 = 0011₂ × 0101₂ ={' '}
+              <Text style={styles.boldTerracottaLight}>A-Q = 0000 1111₂</Text> ={' '}
+              <Text style={styles.highlightProduct}>15₁₀</Text>
             </Text>
           </View>
         </View>
       </View>
 
-      {/* 3. The Three Legendary Registers */}
+      {/* 3. The Core Hardware Registers */}
       <View style={styles.sectionHeaderRow}>
-        <Text style={styles.sectionTitle}>The Three Legendary Registers</Text>
+        <Text style={styles.sectionTitle}>The Core Hardware Registers</Text>
         <View style={styles.specsPill}>
-          <Text style={styles.specsText}>Interactive Specs</Text>
+          <Text style={styles.specsText}>C • A • Q • M</Text>
+        </View>
+      </View>
+
+      {/* Register C: Carry */}
+      <View style={styles.card}>
+        <View style={styles.regHeaderRow}>
+          <View style={styles.regLeft}>
+            <View style={styles.regBadgeFlame}>
+              <Text style={styles.regLetter}>C</Text>
+            </View>
+            <View>
+              <Text style={styles.regTitle}>Carry Register</Text>
+              <Text style={styles.regSub}>1-bit Register • Stores Carry-Out</Text>
+            </View>
+          </View>
+          <View style={styles.defaultBadge}>
+            <Text style={styles.defaultText}>Initial: 0</Text>
+          </View>
+        </View>
+        <Text style={styles.bodySm}>
+          Stores the carry-out generated by the n-bit addition A + M. During each right shift, C shifts into the MSB of Accumulator A, and C resets to 0.
+        </Text>
+        <View style={styles.bitRow}>
+          <View style={styles.bitCellFlame}>
+            <Text style={styles.bitTextFlame}>0</Text>
+          </View>
         </View>
       </View>
 
@@ -186,19 +234,18 @@ export default function LearnScreen({ playerName = 'Student', onNavigateToSimula
             </View>
             <View>
               <Text style={styles.regTitle}>Accumulator</Text>
-              <Text style={styles.regSub}>8-bit Register • Running Sum</Text>
+              <Text style={styles.regSub}>4-bit Register • Running Partial Product</Text>
             </View>
           </View>
           <View style={styles.defaultBadge}>
-            <Text style={styles.defaultText}>Default: 0x00</Text>
+            <Text style={styles.defaultText}>Initial: 0000</Text>
           </View>
         </View>
         <Text style={styles.bodySm}>
-          Accumulates partial products. Starts cleared. When Q₀ = 1, the Multiplicand
-          (M) is summed into this bank.
+          Accumulates partial sums. Initialized to 0. When Q₀ = 1, M is added to A. During the right shift, A shifts right, receiving C at its MSB and sending A₀ into Q.
         </Text>
         <View style={styles.bitRow}>
-          {['0', '0', '0', '0', '0', '0', '0', '0'].map((bit, idx) => (
+          {['0', '0', '0', '0'].map((bit, idx) => (
             <View key={idx} style={styles.bitCellMuted}>
               <Text style={styles.bitTextMuted}>{bit}</Text>
             </View>
@@ -206,7 +253,44 @@ export default function LearnScreen({ playerName = 'Student', onNavigateToSimula
         </View>
       </View>
 
-      {/* Register M: Multiplicand */}
+      {/* Register Q: Multiplier */}
+      <View style={styles.card}>
+        <View style={styles.regHeaderRow}>
+          <View style={styles.regLeft}>
+            <View style={styles.regBadgeNavy}>
+              <Text style={styles.regLetter}>Q</Text>
+            </View>
+            <View>
+              <Text style={styles.regTitle}>Multiplier</Text>
+              <Text style={styles.regSub}>4-bit Register • Value: 5 (0101₂)</Text>
+            </View>
+          </View>
+          <View style={styles.shrBadge}>
+            <Text style={styles.shrText}>SHR » 1</Text>
+            <MaterialIcons name="arrow-forward" size={13} color={COLORS.obsidian} />
+          </View>
+        </View>
+        <Text style={styles.bodySm}>
+          Initially holds the multiplier. At the start of each cycle, bit <Text style={styles.boldTerracotta}>Q₀</Text> (Least Significant Bit) is examined. Shifts RIGHT each cycle, receiving A₀ at its MSB.
+        </Text>
+        <View style={styles.qBitRow}>
+          {['0', '1', '0', '1'].map((bit, idx) => {
+            const isLsb = idx === 3;
+            return (
+              <View key={idx} style={styles.qBitWrapper}>
+                <View style={isLsb ? styles.bitCellFlameLsb : styles.bitCellMutedWide}>
+                  <Text style={isLsb ? styles.bitTextFlame : styles.bitTextMuted}>
+                    {bit}
+                  </Text>
+                </View>
+                {isLsb && <Text style={styles.lsbLabel}>Q₀ (LSB)</Text>}
+              </View>
+            );
+          })}
+        </View>
+      </View>
+
+      {/* Register M: Multiplicand (CONSTANT) */}
       <View style={styles.card}>
         <View style={styles.regHeaderRow}>
           <View style={styles.regLeft}>
@@ -214,22 +298,20 @@ export default function LearnScreen({ playerName = 'Student', onNavigateToSimula
               <Text style={styles.regLetter}>M</Text>
             </View>
             <View>
-              <Text style={styles.regTitle}>Multiplicand</Text>
-              <Text style={styles.regSubFlame}>8-bit Register • Value: 5 (0101₂)</Text>
+              <Text style={styles.regTitle}>Multiplicand (Constant)</Text>
+              <Text style={styles.regSubFlame}>4-bit Register • Value: 3 (0011₂)</Text>
             </View>
           </View>
-          <View style={styles.shlBadge}>
-            <MaterialIcons name="arrow-back" size={13} color={COLORS.terracotta} />
-            <Text style={styles.shlText}>SHL « 1</Text>
+          <View style={styles.constantBadge}>
+            <MaterialIcons name="lock" size={13} color={COLORS.terracotta} />
+            <Text style={styles.constantBadgeText}>CONSTANT</Text>
           </View>
         </View>
         <Text style={styles.bodySm}>
-          Shifts <Text style={styles.boldObsidian}>LEFT</Text> by 1 bit each
-          iteration. Each left shift doubles the value (5 → 10 → 20 → 40), scaling it
-          to the current binary power!
+          Holds the multiplicand throughout the entire multiplication. Multiplicand M <Text style={styles.boldObsidian}>does not shift</Text>; it remains constant in every cycle.
         </Text>
         <View style={styles.bitRow}>
-          {['0', '0', '0', '0', '0', '1', '0', '1'].map((bit, idx) => {
+          {['0', '0', '1', '1'].map((bit, idx) => {
             const isHigh = bit === '1';
             return (
               <View
@@ -245,52 +327,11 @@ export default function LearnScreen({ playerName = 'Student', onNavigateToSimula
         </View>
       </View>
 
-      {/* Register Q: Multiplier */}
-      <View style={styles.card}>
-        <View style={styles.regHeaderRow}>
-          <View style={styles.regLeft}>
-            <View style={styles.regBadgeNavy}>
-              <Text style={styles.regLetter}>Q</Text>
-            </View>
-            <View>
-              <Text style={styles.regTitle}>Multiplier</Text>
-              <Text style={styles.regSub}>4-bit Register • Value: 3 (0011₂)</Text>
-            </View>
-          </View>
-          <View style={styles.shrBadge}>
-            <Text style={styles.shrText}>SHR » 1</Text>
-            <MaterialIcons name="arrow-forward" size={13} color={COLORS.obsidian} />
-          </View>
-        </View>
-        <Text style={styles.bodySm}>
-          The hardware scanner! We only ever examine bit{' '}
-          <Text style={styles.boldTerracotta}>Q₀</Text> (Least Significant Bit). Shifts{' '}
-          <Text style={styles.boldObsidian}>RIGHT</Text> after each test.
-        </Text>
-        <View style={styles.qBitRow}>
-          {['0', '0', '1', '1'].map((bit, idx) => {
-            const isLsb = idx === 3;
-            return (
-              <View key={idx} style={styles.qBitWrapper}>
-                <View
-                  style={isLsb ? styles.bitCellFlameLsb : styles.bitCellMutedWide}
-                >
-                  <Text style={isLsb ? styles.bitTextFlame : styles.bitTextMuted}>
-                    {bit}
-                  </Text>
-                </View>
-                {isLsb && <Text style={styles.lsbLabel}>Q₀ (LSB)</Text>}
-              </View>
-            );
-          })}
-        </View>
-      </View>
-
-      {/* 4. The Golden Rule of Multiplication */}
+      {/* 4. The Golden Rule of Right-Shift Multiplication */}
       <View style={styles.ruleCard}>
         <View style={styles.ruleCardHeader}>
           <MaterialIcons name="verified" size={24} color={COLORS.terracotta} />
-          <Text style={styles.ruleCardTitle}>The Golden Rule of Multiplication</Text>
+          <Text style={styles.ruleCardTitle}>The Golden Rule of Right-Shift Multiplication</Text>
         </View>
 
         <View style={styles.ruleItemsContainer}>
@@ -298,7 +339,7 @@ export default function LearnScreen({ playerName = 'Student', onNavigateToSimula
             <MaterialIcons name="check-circle" size={18} color={COLORS.terracotta} />
             <Text style={styles.ruleText}>
               <Text style={styles.boldRuleTerracotta}>If Q₀ == 1: </Text>
-              Add M into Accumulator A (A = A + M).
+              Add M to Accumulator A (A ← A + M), and store carry-out in C.
             </Text>
           </View>
 
@@ -306,7 +347,7 @@ export default function LearnScreen({ playerName = 'Student', onNavigateToSimula
             <MaterialIcons name="cancel" size={18} color={COLORS.terracottaSoft} />
             <Text style={styles.ruleText}>
               <Text style={styles.boldRuleLight}>If Q₀ == 0: </Text>
-              Skip the addition! Accumulator stays unchanged.
+              Skip addition! C, A, and Q remain unchanged during this phase.
             </Text>
           </View>
 
@@ -314,7 +355,15 @@ export default function LearnScreen({ playerName = 'Student', onNavigateToSimula
             <MaterialIcons name="sync-alt" size={18} color={COLORS.terracotta} />
             <Text style={styles.ruleText}>
               <Text style={styles.boldRuleTerracotta}>Always: </Text>
-              Shift M LEFT « 1 and shift Q RIGHT » 1. Repeat for each bit!
+              Shift combined C-A-Q registers RIGHT » 1: C enters A[3], A[0] enters Q[3], and Q₀ is discarded. Repeat for n cycles!
+            </Text>
+          </View>
+
+          <View style={styles.ruleItem}>
+            <MaterialIcons name="stars" size={18} color={COLORS.terracotta} />
+            <Text style={styles.ruleText}>
+              <Text style={styles.boldRuleTerracotta}>Final Product: </Text>
+              Combined 2n-bit result in A | Q (Accumulator A contains upper n bits, Multiplier Q contains lower n bits).
             </Text>
           </View>
         </View>
@@ -325,7 +374,7 @@ export default function LearnScreen({ playerName = 'Student', onNavigateToSimula
         <View style={styles.cardHeaderBetween}>
           <View style={styles.iconTitleRow}>
             <MaterialIcons name="play-circle" size={22} color={COLORS.terracotta} />
-            <Text style={styles.cardTitle}>Interactive Shift Explorer</Text>
+            <Text style={styles.cardTitle}>Interactive Shift Explorer (3 × 5)</Text>
           </View>
           <TouchableOpacity
             style={[
@@ -336,7 +385,7 @@ export default function LearnScreen({ playerName = 'Student', onNavigateToSimula
             activeOpacity={0.8}
           >
             <Text style={styles.actionPillBtnText}>
-              {isFinished ? 'Finished!' : 'Simulate Shift'}
+              {isFinished ? 'Finished (Restart)' : 'Next Shift »'}
             </Text>
           </TouchableOpacity>
         </View>
@@ -349,112 +398,61 @@ export default function LearnScreen({ playerName = 'Student', onNavigateToSimula
               <Text style={styles.actionBadgeText}>{currentSim.action}</Text>
             </View>
           </View>
-          <Text style={styles.stepDesc}>{currentSim.desc}</Text>
-          <View style={styles.accumRow}>
-            <Text style={styles.accumLabel}>Accumulator (A): </Text>
-            <Text style={styles.accumValue}>{currentSim.accumulator}</Text>
-          </View>
+          <Text style={styles.explanationDesc}>{currentSim.desc}</Text>
         </View>
 
-        {/* M Shift View */}
-        <View style={styles.shiftTrackSection}>
-          <View style={styles.shiftTrackHeader}>
-            <Text style={styles.trackName}>Multiplicand (M) « Left Shift</Text>
-            <Text style={styles.trackValue}>{currentSim.mVal}</Text>
+        {/* C-A-Q Visual Bit Grid */}
+        <View style={styles.explorerGrid}>
+          {/* C Register */}
+          <View style={styles.explorerCol}>
+            <Text style={styles.explorerColLabel}>C (Carry)</Text>
+            <View style={[styles.explorerCellBox, currentSim.cBit === '1' && styles.bitCellFlame]}>
+              <Text style={[styles.explorerCellText, currentSim.cBit === '1' && styles.bitTextFlame]}>
+                {currentSim.cBit}
+              </Text>
+            </View>
           </View>
-          <View style={styles.bitRow}>
-            {currentSim.mBits.map((b, i) => {
-              const isHigh = b === '1';
-              return (
-                <View
-                  key={i}
-                  style={isHigh ? styles.bitCellFlame : styles.bitCellMuted}
-                >
-                  <Text style={isHigh ? styles.bitTextFlame : styles.bitTextMuted}>
+
+          <MaterialIcons name="arrow-forward" size={16} color={COLORS.terracotta} />
+
+          {/* A Register */}
+          <View style={styles.explorerCol}>
+            <Text style={styles.explorerColLabel}>A ({currentSim.aVal})</Text>
+            <View style={styles.explorerBitsRow}>
+              {currentSim.aBits.map((b, idx) => (
+                <View key={idx} style={[styles.explorerCellBoxSm, b === '1' && styles.bitCellFlame]}>
+                  <Text style={[styles.explorerCellTextSm, b === '1' && styles.bitTextFlame]}>
                     {b}
                   </Text>
                 </View>
-              );
-            })}
+              ))}
+            </View>
           </View>
-        </View>
 
-        {/* Q Shift View */}
-        <View style={styles.shiftTrackSection}>
-          <View style={styles.shiftTrackHeader}>
-            <Text style={styles.trackName}>Multiplier (Q) » Right Shift</Text>
-            <Text style={styles.trackValue}>{currentSim.qVal}</Text>
-          </View>
-          <View style={styles.qBitRowInteractive}>
-            {currentSim.qBits.map((b, i) => {
-              const isLsb = i === 3;
-              const isHigh = b === '1';
-              return (
-                <View
-                  key={i}
-                  style={[
-                    styles.bitCellMutedWide,
-                    isLsb && isHigh && styles.bitCellFlameLsb,
-                    !isLsb && isHigh && styles.bitCellActiveWide,
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.bitTextMuted,
-                      isLsb && isHigh && styles.bitTextFlame,
-                      !isLsb && isHigh && styles.bitTextObsidian,
-                    ]}
-                  >
+          <MaterialIcons name="arrow-forward" size={16} color={COLORS.terracotta} />
+
+          {/* Q Register */}
+          <View style={styles.explorerCol}>
+            <Text style={styles.explorerColLabel}>Q ({currentSim.qVal})</Text>
+            <View style={styles.explorerBitsRow}>
+              {currentSim.qBits.map((b, idx) => (
+                <View key={idx} style={[styles.explorerCellBoxSm, b === '1' && styles.bitCellNavy]}>
+                  <Text style={[styles.explorerCellTextSm, b === '1' && styles.bitTextNavy]}>
                     {b}
                   </Text>
                 </View>
-              );
-            })}
+              ))}
+            </View>
           </View>
         </View>
 
-        {/* Reset Demo */}
-        <TouchableOpacity
-          style={styles.resetRow}
-          onPress={handleReset}
-          activeOpacity={0.7}
-        >
-          <MaterialIcons name="restart-alt" size={16} color={COLORS.textMuted} />
-          <Text style={styles.resetText}>Reset Demo</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* 6. Exam Pro-Tip Callout Banner */}
-      <View style={styles.proTipCard}>
-        <View style={styles.proTipIcon}>
-          <MaterialIcons name="bolt" size={20} color={COLORS.white} />
-        </View>
-        <View style={styles.proTipTextCol}>
-          <Text style={styles.proTipLabel}>EXAM PRO-TIP</Text>
-          <Text style={styles.proTipText}>
-            Remember the sacred 4-beat cycle:{' '}
-            <Text style={styles.boldObsidian}>CHECK</Text> →{' '}
-            <Text style={styles.boldTerracotta}>ADD</Text> (if Q₀=1) →{' '}
-            <Text style={styles.boldObsidian}>SHIFT</Text> →{' '}
-            <Text style={styles.boldTerracotta}>REPEAT</Text>.
+        {/* Constant Multiplicand Note */}
+        <View style={styles.explorerFootNote}>
+          <Text style={styles.explorerFootNoteText}>
+            Multiplicand M = 0011 (3) is held constant. After 4 cycles, Product = A | Q = 0000 1111₂ (15).
           </Text>
         </View>
       </View>
-
-      {/* 7. Bottom Action CTA */}
-      <View style={styles.ctaContainer}>
-        <TouchableOpacity
-          style={styles.ctaButton}
-          onPress={onNavigateToSimulator}
-          activeOpacity={0.85}
-        >
-          <Text style={styles.ctaButtonText}>Enter Step-by-Step Simulator</Text>
-          <MaterialIcons name="arrow-forward" size={16} color={COLORS.white} />
-        </TouchableOpacity>
-        <Text style={styles.ctaNote}>Interactive register tracing and custom factor sandbox</Text>
-      </View>
-
-      <View style={{ height: 24 }} />
     </ScrollView>
   );
 }
@@ -466,16 +464,17 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: 16,
-    gap: 14,
+    paddingBottom: 40,
+    gap: 16,
   },
   greetingCard: {
-    backgroundColor: COLORS.cardCream,
-    borderWidth: 1.5,
-    borderColor: COLORS.cardBorder,
+    backgroundColor: COLORS.obsidian,
     borderRadius: 16,
     padding: 16,
-    ...SHADOWS.subtleCard,
+    borderWidth: 1.5,
+    borderColor: COLORS.primaryContainer,
     gap: 10,
+    ...SHADOWS.subtleCard,
   },
   greetingTopRow: {
     flexDirection: 'row',
@@ -485,40 +484,36 @@ const styles = StyleSheet.create({
   greetingBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.cardCreamAlt,
-    borderWidth: 1,
-    borderColor: COLORS.cardBorder,
+    gap: 6,
+    backgroundColor: 'rgba(245, 79, 27, 0.15)',
     paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 12,
-    gap: 4,
+    paddingVertical: 4,
+    borderRadius: 6,
   },
   greetingBadgeText: {
-    fontSize: 9,
-    fontWeight: '800',
     color: COLORS.terracotta,
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-    letterSpacing: 0.8,
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 1,
   },
   curriculumTag: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: COLORS.textMuted,
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    color: 'rgba(250, 243, 232, 0.6)',
+    fontSize: 11,
+    fontWeight: '600',
   },
   greetingHeading: {
     fontSize: 18,
     fontWeight: '800',
-    color: COLORS.obsidian,
-    lineHeight: 22,
+    color: COLORS.white,
+    lineHeight: 24,
   },
   greetingName: {
     color: COLORS.terracotta,
   },
   greetingSub: {
     fontSize: 12,
-    color: COLORS.onSurfaceVariant,
-    lineHeight: 17,
+    color: 'rgba(250, 243, 232, 0.8)',
+    lineHeight: 18,
   },
   quickLaunchRow: {
     flexDirection: 'row',
@@ -526,16 +521,15 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   quickQuestBtn: {
-    flex: 1,
-    backgroundColor: COLORS.terracotta,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 12,
+    flex: 1.2,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
-    ...SHADOWS.hardInk,
+    backgroundColor: COLORS.terracotta,
+    paddingVertical: 10,
+    borderRadius: 10,
+    ...SHADOWS.hardFlame,
   },
   quickQuestBtnText: {
     color: COLORS.white,
@@ -544,16 +538,15 @@ const styles = StyleSheet.create({
   },
   quickSimBtn: {
     flex: 1,
-    backgroundColor: COLORS.cardCreamAlt,
-    borderWidth: 1.5,
-    borderColor: COLORS.cardBorder,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 12,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
+    backgroundColor: COLORS.cardCream,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: COLORS.cardBorder,
   },
   quickSimBtnText: {
     color: COLORS.obsidian,
@@ -562,105 +555,103 @@ const styles = StyleSheet.create({
   },
   card: {
     backgroundColor: COLORS.cardCream,
-    borderWidth: 1.5,
-    borderColor: COLORS.cardBorder,
     borderRadius: 16,
     padding: 16,
+    borderWidth: 1.5,
+    borderColor: COLORS.cardBorder,
+    gap: 12,
     ...SHADOWS.subtleCard,
-    gap: 10,
   },
   badgeRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    gap: 8,
   },
   missionBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.obsidian,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 20,
-    gap: 6,
+    gap: 4,
+    backgroundColor: COLORS.terracotta,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
   },
   missionText: {
     color: COLORS.white,
     fontSize: 10,
     fontWeight: '800',
     letterSpacing: 1,
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
   },
   architecturePill: {
-    backgroundColor: COLORS.surfaceHigh,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 20,
+    backgroundColor: COLORS.cardCreamAlt,
     borderWidth: 1,
     borderColor: COLORS.cardBorder,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
   },
   architecturePillText: {
     color: COLORS.obsidian,
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: '700',
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
   },
   title: {
     fontSize: 22,
     fontWeight: '800',
     color: COLORS.obsidian,
-    lineHeight: 26,
-    letterSpacing: -0.3,
   },
   subtitle: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: COLORS.onSurfaceVariant,
+    fontSize: 13,
+    color: COLORS.textMuted,
   },
   cardHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 10,
   },
   iconSquare: {
     width: 32,
     height: 32,
     borderRadius: 8,
-    backgroundColor: COLORS.terracotta,
+    backgroundColor: COLORS.obsidian,
     alignItems: 'center',
     justifyContent: 'center',
   },
   cardTitle: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '800',
     color: COLORS.obsidian,
-    flex: 1,
   },
   bodyText: {
-    fontSize: 14,
-    color: COLORS.onSurfaceVariant,
-    lineHeight: 20,
+    fontSize: 13,
+    color: COLORS.textMuted,
+    lineHeight: 19,
   },
   boldTerracotta: {
     color: COLORS.terracotta,
     fontWeight: '800',
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
   },
   boldObsidian: {
     color: COLORS.obsidian,
     fontWeight: '800',
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
   },
   matrixContainer: {
-    gap: 8,
+    gap: 10,
     marginTop: 4,
   },
   matrixBoxLight: {
     backgroundColor: COLORS.cardCreamAlt,
     borderWidth: 1,
     borderColor: COLORS.cardBorder,
-    borderRadius: 12,
-    padding: 10,
-    gap: 4,
+    borderRadius: 10,
+    padding: 12,
+    gap: 6,
+  },
+  matrixBoxDark: {
+    backgroundColor: COLORS.obsidian,
+    borderRadius: 10,
+    padding: 12,
+    gap: 6,
   },
   matrixBoxHeader: {
     flexDirection: 'row',
@@ -670,89 +661,69 @@ const styles = StyleSheet.create({
   matrixBoxTitle: {
     fontSize: 10,
     fontWeight: '800',
-    color: COLORS.onSurfaceVariant,
-    letterSpacing: 0.8,
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-  },
-  basePillLight: {
-    backgroundColor: COLORS.surfaceHigh,
     color: COLORS.obsidian,
-    fontSize: 10,
-    fontWeight: '700',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 10,
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-  },
-  matrixCode: {
-    fontSize: 13,
-    color: COLORS.obsidian,
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-  },
-  matrixBoxDark: {
-    backgroundColor: COLORS.obsidian,
-    borderRadius: 12,
-    padding: 10,
-    gap: 4,
-    ...SHADOWS.subtleCard,
+    letterSpacing: 0.5,
   },
   matrixBoxTitleDark: {
     fontSize: 10,
     fontWeight: '800',
-    color: COLORS.terracottaSoft,
-    letterSpacing: 0.8,
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    color: COLORS.terracotta,
+    letterSpacing: 0.5,
+  },
+  basePillLight: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: COLORS.textMuted,
   },
   basePillDark: {
-    backgroundColor: COLORS.terracotta,
-    color: COLORS.white,
-    fontSize: 10,
+    fontSize: 9,
+    fontWeight: '800',
+    color: 'rgba(250, 243, 232, 0.6)',
+  },
+  matrixCode: {
+    fontSize: 13,
     fontWeight: '700',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 10,
+    color: COLORS.obsidian,
     fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
   },
   matrixCodeDark: {
     fontSize: 13,
+    fontWeight: '700',
     color: COLORS.cardCream,
     fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
   },
   boldTerracottaLight: {
-    color: COLORS.terracottaSoft,
+    color: COLORS.terracotta,
     fontWeight: '800',
   },
   highlightProduct: {
-    color: COLORS.white,
-    backgroundColor: COLORS.terracotta,
-    fontWeight: '900',
-    paddingHorizontal: 4,
-    borderRadius: 4,
+    color: COLORS.terracotta,
+    fontWeight: '800',
   },
   sectionHeaderRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 2,
+    paddingHorizontal: 4,
+    marginTop: 4,
   },
   sectionTitle: {
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: '800',
     color: COLORS.obsidian,
   },
   specsPill: {
-    backgroundColor: COLORS.cardCream,
+    backgroundColor: COLORS.cardCreamAlt,
     borderWidth: 1,
     borderColor: COLORS.cardBorder,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 20,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
   },
   specsText: {
     fontSize: 11,
-    fontWeight: '700',
-    color: COLORS.obsidian,
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    fontWeight: '800',
+    color: COLORS.terracotta,
   },
   regHeaderRow: {
     flexDirection: 'row',
@@ -764,38 +735,35 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 10,
   },
-  regBadgeNavy: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
-    backgroundColor: COLORS.obsidian,
+  regBadgeFlame: {
+    width: 28,
+    height: 28,
+    borderRadius: 6,
+    backgroundColor: COLORS.terracotta,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  regBadgeFlame: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
-    backgroundColor: COLORS.terracotta,
+  regBadgeNavy: {
+    width: 28,
+    height: 28,
+    borderRadius: 6,
+    backgroundColor: COLORS.obsidian,
     alignItems: 'center',
     justifyContent: 'center',
   },
   regLetter: {
     color: COLORS.white,
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '800',
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
   },
   regTitle: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '800',
     color: COLORS.obsidian,
-    lineHeight: 18,
   },
   regSub: {
     fontSize: 11,
-    color: COLORS.onSurfaceVariant,
-    fontWeight: '600',
+    color: COLORS.textMuted,
   },
   regSubFlame: {
     fontSize: 11,
@@ -803,123 +771,135 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   defaultBadge: {
-    backgroundColor: COLORS.surfaceHigh,
+    backgroundColor: COLORS.cardCreamAlt,
     borderWidth: 1,
     borderColor: COLORS.cardBorder,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
   },
   defaultText: {
     fontSize: 10,
     fontWeight: '700',
-    color: COLORS.obsidian,
+    color: COLORS.textMuted,
     fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
   },
-  shlBadge: {
+  constantBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.terracottaSoft,
-    borderWidth: 1,
-    borderColor: COLORS.terracotta,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
     gap: 4,
+    backgroundColor: COLORS.cardCreamAlt,
+    borderWidth: 1,
+    borderColor: COLORS.cardBorder,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
   },
-  shlText: {
+  constantBadgeText: {
     fontSize: 10,
     fontWeight: '800',
     color: COLORS.terracotta,
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
   },
   shrBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(30, 34, 61, 0.08)',
-    borderWidth: 1,
-    borderColor: COLORS.obsidian,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
     gap: 4,
+    backgroundColor: COLORS.cardCreamAlt,
+    borderWidth: 1,
+    borderColor: COLORS.cardBorder,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
   },
   shrText: {
     fontSize: 10,
     fontWeight: '800',
     color: COLORS.obsidian,
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
   },
   bodySm: {
     fontSize: 12,
-    color: COLORS.onSurfaceVariant,
+    color: COLORS.textMuted,
     lineHeight: 17,
   },
   bitRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 4,
-    paddingVertical: 2,
+    gap: 6,
+    marginTop: 4,
   },
   bitCellMuted: {
-    flex: 1,
+    width: 32,
     height: 32,
-    backgroundColor: COLORS.surfaceHigh,
+    borderRadius: 6,
+    backgroundColor: COLORS.cardCreamAlt,
     borderWidth: 1,
     borderColor: COLORS.cardBorder,
-    borderRadius: 6,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  bitCellFlame: {
-    flex: 1,
-    height: 32,
-    backgroundColor: COLORS.terracotta,
-    borderWidth: 1,
-    borderColor: COLORS.terracottaDark,
-    borderRadius: 6,
-    alignItems: 'center',
-    justifyContent: 'center',
-    ...SHADOWS.hardFlame,
   },
   bitTextMuted: {
-    color: COLORS.obsidian,
-    fontSize: 13,
-    fontWeight: '700',
+    fontSize: 14,
+    fontWeight: '800',
+    color: COLORS.textMuted,
     fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
   },
+  bitCellFlame: {
+    width: 32,
+    height: 32,
+    borderRadius: 6,
+    backgroundColor: COLORS.terracotta,
+    borderWidth: 1,
+    borderColor: COLORS.terracotta,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   bitTextFlame: {
-    color: COLORS.white,
     fontSize: 14,
-    fontWeight: '900',
+    fontWeight: '800',
+    color: COLORS.white,
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+  },
+  bitCellNavy: {
+    width: 32,
+    height: 32,
+    borderRadius: 6,
+    backgroundColor: COLORS.obsidian,
+    borderWidth: 1,
+    borderColor: COLORS.obsidian,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bitTextNavy: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: COLORS.white,
     fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
   },
   qBitRow: {
     flexDirection: 'row',
-    justifyContent: 'flex-end',
     gap: 8,
-    paddingVertical: 4,
+    marginTop: 4,
   },
   qBitWrapper: {
     alignItems: 'center',
+    gap: 4,
   },
   bitCellMutedWide: {
-    width: 48,
-    height: 36,
-    backgroundColor: COLORS.surfaceHigh,
+    width: 38,
+    height: 34,
+    borderRadius: 6,
+    backgroundColor: COLORS.cardCreamAlt,
     borderWidth: 1,
     borderColor: COLORS.cardBorder,
-    borderRadius: 6,
     alignItems: 'center',
     justifyContent: 'center',
   },
   bitCellFlameLsb: {
-    width: 48,
-    height: 36,
+    width: 38,
+    height: 34,
+    borderRadius: 6,
     backgroundColor: COLORS.terracotta,
     borderWidth: 1,
-    borderColor: COLORS.terracottaDark,
-    borderRadius: 6,
+    borderColor: COLORS.terracotta,
     alignItems: 'center',
     justifyContent: 'center',
     ...SHADOWS.hardFlame,
@@ -928,15 +908,13 @@ const styles = StyleSheet.create({
     fontSize: 9,
     fontWeight: '800',
     color: COLORS.terracotta,
-    marginTop: 4,
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
   },
   ruleCard: {
     backgroundColor: COLORS.obsidian,
     borderRadius: 16,
-    borderWidth: 1.5,
-    borderColor: COLORS.cardBorder,
     padding: 16,
+    borderWidth: 1.5,
+    borderColor: COLORS.terracotta,
     gap: 12,
     ...SHADOWS.subtleCard,
   },
@@ -946,67 +924,60 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   ruleCardTitle: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '800',
     color: COLORS.white,
   },
   ruleItemsContainer: {
-    gap: 8,
+    gap: 10,
   },
   ruleItem: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
-    borderRadius: 12,
-    padding: 10,
     gap: 8,
   },
   ruleText: {
-    fontSize: 13,
+    flex: 1,
+    fontSize: 12,
     color: COLORS.cardCream,
     lineHeight: 18,
-    flex: 1,
   },
   boldRuleTerracotta: {
     color: COLORS.terracotta,
     fontWeight: '800',
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
   },
   boldRuleLight: {
-    color: COLORS.terracottaSoft,
+    color: 'rgba(250, 243, 232, 0.7)',
     fontWeight: '800',
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
   },
   cardHeaderBetween: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 8,
   },
   iconTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 8,
   },
   actionPillBtn: {
     backgroundColor: COLORS.obsidian,
     paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: 20,
-    ...SHADOWS.hardInk,
+    borderRadius: 8,
   },
   actionPillBtnText: {
     color: COLORS.white,
     fontSize: 11,
     fontWeight: '800',
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
   },
   explanationBox: {
     backgroundColor: COLORS.cardCreamAlt,
     borderWidth: 1,
     borderColor: COLORS.cardBorder,
-    borderRadius: 12,
+    borderRadius: 10,
     padding: 12,
     gap: 6,
   },
@@ -1019,156 +990,86 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '800',
     color: COLORS.obsidian,
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
   },
   actionBadgePill: {
     backgroundColor: COLORS.terracotta,
     paddingHorizontal: 8,
     paddingVertical: 2,
-    borderRadius: 12,
+    borderRadius: 4,
   },
   actionBadgeText: {
     color: COLORS.white,
     fontSize: 10,
     fontWeight: '800',
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
   },
-  stepDesc: {
+  explanationDesc: {
     fontSize: 12,
-    color: COLORS.onSurfaceVariant,
+    color: COLORS.textMuted,
     lineHeight: 17,
   },
-  accumRow: {
+  explorerGrid: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 2,
-  },
-  accumLabel: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: COLORS.obsidian,
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-  },
-  accumValue: {
-    fontSize: 12,
-    fontWeight: '800',
-    color: COLORS.terracotta,
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-  },
-  shiftTrackSection: {
-    gap: 4,
-  },
-  shiftTrackHeader: {
-    flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  trackName: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: COLORS.obsidian,
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-  },
-  trackValue: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: COLORS.terracotta,
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-  },
-  qBitRowInteractive: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    gap: 6,
-  },
-  bitCellActiveWide: {
-    width: 48,
-    height: 36,
-    backgroundColor: COLORS.surfaceHighest,
+    backgroundColor: COLORS.cardCreamAlt,
+    borderRadius: 12,
+    padding: 10,
     borderWidth: 1,
     borderColor: COLORS.cardBorder,
-    borderRadius: 6,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
-  bitTextObsidian: {
-    color: COLORS.obsidian,
-    fontSize: 14,
-    fontWeight: '900',
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-  },
-  resetRow: {
-    flexDirection: 'row',
+  explorerCol: {
     alignItems: 'center',
-    justifyContent: 'flex-end',
     gap: 4,
-    paddingTop: 4,
   },
-  resetText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: COLORS.textMuted,
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-  },
-  proTipCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: COLORS.cardCream,
-    borderWidth: 1.5,
-    borderColor: 'rgba(245, 79, 27, 0.4)',
-    borderRadius: 16,
-    padding: 14,
-    gap: 12,
-    ...SHADOWS.subtleCard,
-  },
-  proTipIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: COLORS.terracotta,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  proTipTextCol: {
-    flex: 1,
-    gap: 2,
-  },
-  proTipLabel: {
+  explorerColLabel: {
     fontSize: 10,
-    fontWeight: '900',
-    color: COLORS.terracotta,
-    letterSpacing: 1,
+    fontWeight: '700',
+    color: COLORS.obsidian,
+  },
+  explorerBitsRow: {
+    flexDirection: 'row',
+    gap: 3,
+  },
+  explorerCellBox: {
+    width: 28,
+    height: 28,
+    borderRadius: 6,
+    backgroundColor: COLORS.pageBg,
+    borderWidth: 1,
+    borderColor: COLORS.cardBorder,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  explorerCellBoxSm: {
+    width: 22,
+    height: 26,
+    borderRadius: 4,
+    backgroundColor: COLORS.pageBg,
+    borderWidth: 1,
+    borderColor: COLORS.cardBorder,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  explorerCellText: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: COLORS.obsidian,
     fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
   },
-  proTipText: {
+  explorerCellTextSm: {
     fontSize: 12,
-    color: COLORS.obsidian,
-    lineHeight: 17,
-  },
-  ctaContainer: {
-    marginTop: 6,
-    gap: 6,
-    alignItems: 'center',
-  },
-  ctaButton: {
-    width: '100%',
-    backgroundColor: COLORS.terracotta,
-    paddingVertical: 14,
-    paddingHorizontal: 20,
-    borderRadius: 16,
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 10,
-    ...SHADOWS.hardInk,
-  },
-  ctaButtonText: {
-    color: COLORS.white,
-    fontSize: 15,
     fontWeight: '800',
+    color: COLORS.obsidian,
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
   },
-  ctaNote: {
+  explorerFootNote: {
+    borderTopWidth: 1,
+    borderTopColor: COLORS.cardBorder,
+    paddingTop: 8,
+  },
+  explorerFootNoteText: {
     fontSize: 11,
-    color: COLORS.onSurfaceVariant,
-    fontWeight: '500',
+    color: COLORS.textMuted,
+    lineHeight: 16,
   },
 });

@@ -11,15 +11,23 @@ An interactive, quest-based educational game built with **React Native** and **E
 BitShift demystifies how processors multiply binary numbers without requiring complex single-cycle multiplication arrays. Players master:
 
 - **Registers & Microarchitecture**:
-  - **Accumulator ($A$)**: 8-bit register holding partial products and the running sum (initialized to `0x00`).
-  - **Multiplicand ($M$)**: 8-bit register shifted **left** by 1 bit each cycle ($M \ll 1$), doubling its binary weight ($2^0 \to 2^1 \to 2^2 \dots$).
-  - **Multiplier ($Q$)**: 4-bit register scanned at its least-significant bit ($Q_0$) and shifted **right** each cycle ($Q \gg 1$).
+  - **Carry Register ($C$)**: 1-bit register storing the carry generated during addition (initialized to `0`).
+  - **Accumulator ($A$)**: 4-bit ($n$-bit) register storing intermediate partial products (initialized to `0000`).
+  - **Multiplier ($Q$)**: 4-bit ($n$-bit) register scanned at its least-significant bit ($Q_0$) before each shift, eventually holding the lower half of the final product.
+  - **Multiplicand ($M$)**: 4-bit ($n$-bit) register loaded with the multiplicand, remaining **constant** throughout all cycles.
+  - **Combined Register Group ($C-A-Q$)**: $2n + 1$ bits (9 bits for 4-bit operands) shifting **RIGHT** together in every cycle.
 - **The Core Decision Rule**:
-  - **If $Q_0 == 1$**: Add the multiplicand into the accumulator ($A \leftarrow A + M$).
-  - **If $Q_0 == 0$**: Skip addition (bypass adder), leaving $A$ unchanged.
-  - **Always**: Shift $M$ left ($M \ll 1$), shift $Q$ right ($Q \gg 1$), and decrement step counter until all bits are processed.
+  - **Step 1: Examine $Q_0$**:
+    - **If $Q_0 == 1$**: Add Multiplicand $M$ to Accumulator $A$ ($A \leftarrow A + M$), and store carry-out in $C$.
+    - **If $Q_0 == 0$**: Skip addition; keep $C, A, Q$ unchanged during this phase.
+  - **Step 2: Combined Right Shift**:
+    - Shift combined $C-A-Q$ registers **RIGHT** by 1 bit: Carry $C$ moves into $A$'s MSB ($A[n-1]$), $A$'s LSB ($A[0]$) moves into $Q$'s MSB ($Q[n-1]$), $Q_0$ is discarded, and new $C$ becomes `0`.
+  - **Step 3: Repeat for $n$ cycles**:
+    - Decrement counter. Repeat until all $n$ bits are processed.
+  - **Final Product**:
+    - **Product = $A \mid Q$** ($2n$ bits, 8 bits for 4-bit operands).
 - **Benchmark Calculation**:
-  - $5 \times 3$ ($0101_2 \times 0011_2$) producing the verified 8-bit binary product $0000\,1111_2$ (decimal $15$).
+  - $3 \times 5$ ($0011_2 \times 0101_2$) producing the verified 8-bit binary product $0000\,1111_2$ (decimal $15$).
 
 ---
 
@@ -46,16 +54,17 @@ BitShift demystifies how processors multiply binary numbers without requiring co
 - **Play Again (Replay)**: Starts a fresh attempt with a newly shuffled set of 5 questions, reset timer, and preserved player name.
 
 ### 3. Interactive Register Simulator
-- Step-by-step hardware cycle execution (`Step 1 of 4` through `Step 4 of 4`).
-- Real-time bit cells for Accumulator ($A$), Multiplicand ($M$), and Multiplier ($Q$).
-- **ALU Addition Scratchpad**: Deep midnight navy canvas showing binary arithmetic rows ($A$, $+ M$, $= A+M$) with hexadecimal and decimal readouts.
+- Step-by-step hardware cycle execution (`Cycle 1 of 4` through `Cycle 4 of 4`).
+- Real-time bit cells for Carry Register ($C$), Accumulator ($A$), Multiplier ($Q$), and constant Multiplicand ($M$).
+- **Combined $C-A-Q$ Right-Shift Pipeline**: Visual 9-bit register diagram illustrating carry $C$ shifting into $A[3]$, $A[0]$ shifting into $Q[3]$, and $Q_0$ dropping out.
+- **ALU Addition Scratchpad**: Deep midnight navy canvas showing binary arithmetic rows ($A$, $+ M$, $= \text{Sum } A \text{ and Carry } C$) with hexadecimal and decimal readouts.
 - **Controls**: *Reset*, *Auto-Play*, and *Next Shift*.
-- **Custom Multiplier Sandbox**: Allows testing custom multiplicand and multiplier values (e.g. $6 \times 7$, $7 \times 3$) with live simulation.
+- **Custom Multiplier Sandbox**: Allows testing custom operands (e.g. $7 \times 3$, $15 \times 15$, $0 \times 5$) with live right-shift simulation.
 
 ### 4. Trace Matrix & Flowchart
-- **5 × 3 Trace Matrix Table**: Complete row-by-row register trace showing $A$ (Before), $Q$ (Before), $Q_0$, Operation, and $A$ (After).
-- **Hardware Control Flowchart**: Interactive sequential logic flowchart with selectable nodes (*START*, *Initialization*, *Decision Checks*, *ADD / BYPASS branches*, *Clock Transition*).
-- **Exam Cheat-Sheet Accordions**: Deep dive into register bit-width mathematical proofs, $O(n)$ time complexity, and Booth's algorithm comparison.
+- **3 × 5 Trace Matrix Table**: Complete row-by-row register trace showing Stage, $C$, $A$, $Q$, $Q_0$, and Operation.
+- **Hardware Control Flowchart**: Interactive sequential logic flowchart with selectable nodes (*START*, *Initialization*, *Decision Checks*, *ADD / BYPASS branches*, *Combined Right Shift Transition*).
+- **Exam Cheat-Sheet Accordions**: Deep dive into $2n$-bit final product storage ($A \mid Q$), $O(n)$ clock cycle proofs, and comparison with Booth's algorithm.
 
 ---
 

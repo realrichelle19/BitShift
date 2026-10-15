@@ -12,85 +12,143 @@ import { COLORS, SHADOWS } from '../theme';
 
 const TRACE_ROWS = [
   {
-    step: 'Init',
-    aBefore: '00000000',
-    qBefore: '0011',
+    stage: 'Initial',
+    c: '0',
+    a: '0000',
+    q: '0101',
     q0: '—',
-    op: 'Initialize registers',
-    aAfter: '00000000',
-    decAfter: '(0)',
+    op: 'Initialise registers (M=0011, Q=0101)',
     isHighlight: false,
   },
   {
-    step: '#1',
-    aBefore: '00000000',
-    qBefore: '0011',
+    stage: 'Cycle 1: Check Q₀',
+    c: '0',
+    a: '0000',
+    q: '0101',
     q0: '1',
-    op: 'A ← A + M',
-    aAfter: '00000101',
-    decAfter: '(5)',
+    op: 'Q₀ = 1, so add M',
     isHighlight: true,
   },
   {
-    step: '#2',
-    aBefore: '00000101',
-    qBefore: '0001',
+    stage: 'After addition',
+    c: '0',
+    a: '0011',
+    q: '0101',
     q0: '1',
-    op: 'A ← A + M',
-    aAfter: '00001111',
-    decAfter: '(15)',
+    op: 'A = 0000 + 0011',
     isHighlight: true,
   },
   {
-    step: '#3',
-    aBefore: '00001111',
-    qBefore: '0000',
+    stage: 'After right shift',
+    c: '0',
+    a: '0001',
+    q: '1010',
     q0: '0',
-    op: 'No Add (Shift only)',
-    aAfter: '00001111',
-    decAfter: '(15)',
+    op: 'Shift combined C-A-Q right',
     isHighlight: false,
   },
   {
-    step: '#4',
-    aBefore: '00001111',
-    qBefore: '0000',
+    stage: 'Cycle 2: Check Q₀',
+    c: '0',
+    a: '0001',
+    q: '1010',
     q0: '0',
-    op: 'No Add (Shift only)',
-    aAfter: '00001111',
-    decAfter: '(15)',
+    op: 'Q₀ = 0, so skip addition',
     isHighlight: false,
+  },
+  {
+    stage: 'After right shift',
+    c: '0',
+    a: '0000',
+    q: '1101',
+    q0: '1',
+    op: 'Shift combined C-A-Q right',
+    isHighlight: false,
+  },
+  {
+    stage: 'Cycle 3: Check Q₀',
+    c: '0',
+    a: '0000',
+    q: '1101',
+    q0: '1',
+    op: 'Q₀ = 1, so add M',
+    isHighlight: true,
+  },
+  {
+    stage: 'After addition',
+    c: '0',
+    a: '0011',
+    q: '1101',
+    q0: '1',
+    op: 'A = 0000 + 0011',
+    isHighlight: true,
+  },
+  {
+    stage: 'After right shift',
+    c: '0',
+    a: '0001',
+    q: '1110',
+    q0: '0',
+    op: 'Shift combined C-A-Q right',
+    isHighlight: false,
+  },
+  {
+    stage: 'Cycle 4: Check Q₀',
+    c: '0',
+    a: '0001',
+    q: '1110',
+    q0: '0',
+    op: 'Q₀ = 0, so skip addition',
+    isHighlight: false,
+  },
+  {
+    stage: 'After right shift',
+    c: '0',
+    a: '0000',
+    q: '1111',
+    q0: '1',
+    op: 'Shift combined C-A-Q right',
+    isHighlight: false,
+  },
+  {
+    stage: 'Final result',
+    c: '0',
+    a: '0000',
+    q: '1111',
+    q0: '—',
+    op: 'A-Q = 00001111 (Dec: 15)',
+    isHighlight: true,
   },
 ];
 
 const FLOWCHART_NODES = {
   start: {
     title: 'START EXECUTION',
-    desc: 'Multiplication command invoked. Micro-code sequencer resets register state and loads multiplicand and multiplier values.',
+    desc: 'Multiplication command invoked. Control unit resets internal state and loads Multiplicand M and Multiplier Q.',
   },
   init: {
-    title: 'Initialization: A ← 0, Load M, Load Q',
-    desc: 'Accumulator A is cleared to zero (0000 0000). Multiplicand register is loaded with M (5). Multiplier register is loaded with Q (3). Step counter is initialized to n = 4.',
+    title: 'Initialization: C ← 0, A ← 0, Load M, Load Q',
+    desc: 'Accumulator A is cleared to zero (0000). Carry register C is set to 0. Multiplicand register is loaded with M (0011 = 3) and remains unchanged. Multiplier register is loaded with Q (0101 = 5). Step counter is initialized to n = 4.',
   },
   decision: {
     title: 'Decision Check: Counter == 0 ?',
-    desc: 'The control logic tests whether all n bits have been processed. If yes, the final product is ready in accumulator A and the engine halts. If no, the loop continues.',
+    desc: 'Control logic tests whether all n = 4 cycles have completed. If yes, the 8-bit product is ready in registers A-Q (A contains high nibble, Q contains low nibble) and execution halts. If no, proceed to examine Q₀.',
   },
   q0check: {
     title: 'Condition Check: Is Q₀ == 1 ?',
-    desc: 'ALU multiplexer inspects the least-significant bit (Q₀) of multiplier Q. If 1, ALU triggers an ADD micro-operation. If 0, the addition is bypassed.',
+    desc: 'Hardware multiplexer inspects the least-significant bit (Q₀) of multiplier Q before any shift occurs. If Q₀ = 1, ALU triggers addition A ← A + M. If Q₀ = 0, addition is bypassed.',
   },
   add: {
-    title: 'Micro-op: A ← A + M',
-    desc: 'Hardware 8-bit adder sums Accumulator A and Multiplicand M. Carry is absorbed into upper bits of A without overflow.',
+    title: 'Micro-op: A ← A + M, C ← Carry Out',
+    desc: 'Hardware 4-bit adder sums Accumulator A and Multiplicand M. Lower 4 bits of sum are stored in A, and the carry-out is stored in 1-bit register C.',
   },
   bypass: {
-    title: 'Micro-op: Bypass Add',
-    desc: 'Q₀ is zero, meaning 0 × M = 0. Accumulator A retains its running total undisturbed, saving ALU switching power.',
+    title: 'Micro-op: Bypass Add (Q₀ = 0)',
+    desc: 'Because Q₀ = 0, 0 × M = 0. Registers C, A, and Q remain unchanged during this phase, proceeding directly to the right shift.',
   },
   shift: {
-    title: 'Transition: Q >> 1 | M << 1 | Counter − 1',
-    desc: 'Synchronized hardware shift on clock pulse: Multiplier Q shifts right by 1 bit discarding examined Q₀. Multiplicand M shifts left by 1 bit doubling its value for the next power of 2. Counter decrements by 1.',
+    title: 'Transition: Shift C-A-Q RIGHT » 1 | Counter − 1',
+    desc: 'Combined register group C-A-Q shifts right by 1 bit: C moves into A[3], bits of A shift right, A[0] moves into Q[3], bits of Q shift right, old Q[0] is discarded, and C resets to 0. Counter decrements by 1.',
   },
 };
 
@@ -137,11 +195,10 @@ export default function TableScreen() {
         </View>
 
         <Text style={styles.overviewTitle}>
-          Complete Execution Matrix & Architecture Flowchart
+          Execution Trace Matrix & Hardware Flowchart
         </Text>
         <Text style={styles.overviewSubtitle}>
-          Step-by-step register states for sequential binary multiplication with
-          real-time logical execution paths.
+          Step-by-step register states for sequential right-shift binary multiplication with real-time logical execution paths.
         </Text>
 
         {/* Quick Filter Pills */}
@@ -173,7 +230,7 @@ export default function TableScreen() {
                   : styles.filterPillTextInactive,
               ]}
             >
-              5 × 3 Full Trace
+              3 × 5 Full Trace
             </Text>
           </TouchableOpacity>
 
@@ -246,16 +303,15 @@ export default function TableScreen() {
         <View style={styles.cardHeaderRow}>
           <View style={styles.dotTitleRow}>
             <View style={styles.navyDot} />
-            <Text style={styles.cardTitle}>5 × 3 Trace Matrix</Text>
+            <Text style={styles.cardTitle}>3 × 5 Right-Shift Trace Matrix</Text>
           </View>
           <View style={styles.matrixBadge}>
-            <Text style={styles.matrixBadgeText}>M=0101, Q=0011</Text>
+            <Text style={styles.matrixBadgeText}>M=0011 (3), Q=0101 (5)</Text>
           </View>
         </View>
 
         <Text style={styles.bodySm}>
-          Horizontal scroll for full 8-bit register inspect. Highlights indicate bit
-          test triggers.
+          Combined register C-A-Q right-shift sequence. C contains carry, A contains partial product, and Q contains multiplier.
         </Text>
 
         {/* Scrollable Table */}
@@ -263,12 +319,12 @@ export default function TableScreen() {
           <View style={styles.table}>
             {/* Table Header */}
             <View style={styles.tableHeaderRow}>
-              <Text style={[styles.thCell, { width: 50 }]}>Step</Text>
-              <Text style={[styles.thCell, { width: 90 }]}>A (Before)</Text>
-              <Text style={[styles.thCell, { width: 80 }]}>Q (Before)</Text>
+              <Text style={[styles.thCell, { width: 140 }]}>Stage</Text>
+              <Text style={[styles.thCellCenter, { width: 36 }]}>C</Text>
+              <Text style={[styles.thCellCenter, { width: 68 }]}>A</Text>
+              <Text style={[styles.thCellCenter, { width: 68 }]}>Q</Text>
               <Text style={[styles.thCellCenter, { width: 44 }]}>Q₀</Text>
-              <Text style={[styles.thCell, { width: 140 }]}>Operation</Text>
-              <Text style={[styles.thCell, { width: 120 }]}>A (After)</Text>
+              <Text style={[styles.thCell, { width: 220 }]}>Operation</Text>
             </View>
 
             {/* Table Rows */}
@@ -283,14 +339,15 @@ export default function TableScreen() {
                 <Text
                   style={[
                     styles.tdCell,
-                    { width: 50 },
+                    { width: 140 },
                     row.isHighlight && { color: COLORS.terracotta, fontWeight: '800' },
                   ]}
                 >
-                  {row.step}
+                  {row.stage}
                 </Text>
-                <Text style={[styles.tdCode, { width: 90 }]}>{row.aBefore}</Text>
-                <Text style={[styles.tdCode, { width: 80 }]}>{row.qBefore}</Text>
+                <Text style={[styles.tdCodeCenter, { width: 36 }]}>{row.c}</Text>
+                <Text style={[styles.tdCodeCenter, { width: 68 }]}>{row.a}</Text>
+                <Text style={[styles.tdCodeCenter, { width: 68 }]}>{row.q}</Text>
                 <View style={[styles.tdCellCenter, { width: 44 }]}>
                   {row.q0 === '1' ? (
                     <View style={styles.q0FlamePill}>
@@ -304,13 +361,13 @@ export default function TableScreen() {
                     <Text style={styles.tdCellMuted}>—</Text>
                   )}
                 </View>
-                <View style={[styles.tdCellRow, { width: 140 }]}>
+                <View style={[styles.tdCellRow, { width: 220 }]}>
                   {row.isHighlight && (
                     <MaterialIcons
-                      name="add-circle"
+                      name={row.stage.includes('Final') ? 'verified' : 'add-circle'}
                       size={13}
                       color={COLORS.terracotta}
-                      style={{ marginRight: 3 }}
+                      style={{ marginRight: 4 }}
                     />
                   )}
                   <Text
@@ -322,37 +379,26 @@ export default function TableScreen() {
                     {row.op}
                   </Text>
                 </View>
-                <Text style={[styles.tdCode, { width: 120 }]}>
-                  {row.aAfter}{' '}
-                  <Text
-                    style={[
-                      styles.decNote,
-                      row.isHighlight && { color: COLORS.terracotta, fontWeight: '800' },
-                    ]}
-                  >
-                    {row.decAfter}
-                  </Text>
-                </Text>
               </View>
             ))}
           </View>
         </ScrollView>
 
-        {/* Multiplier Exhausted Dignified Banner */}
+        {/* Multiplier Exhausted Banner */}
         <View style={styles.bannerNavy}>
           <MaterialIcons name="verified" size={24} color={COLORS.terracotta} />
           <View style={{ flex: 1, gap: 2 }}>
             <Text style={styles.bannerTitle}>
-              Multiplier Exhausted (All 4 bits evaluated)
+              4 Cycles Completed • Multiplier Exhausted
             </Text>
             <Text style={styles.bannerSubtitle}>
-              Final Accumulator:{' '}
+              Final Product A | Q:{' '}
               <Text style={{ color: COLORS.terracotta, fontWeight: '800' }}>
                 00001111₂
               </Text>{' '}
               • Decimal Value:{' '}
               <Text style={{ color: COLORS.white, fontWeight: '800' }}>15₁₀</Text>{' '}
-              (5 × 3 = 15)
+              (3 × 5 = 15)
             </Text>
           </View>
         </View>
@@ -366,13 +412,12 @@ export default function TableScreen() {
             <Text style={styles.cardTitle}>Hardware Control Flowchart</Text>
           </View>
           <View style={styles.logicBadge}>
-            <Text style={styles.logicBadgeText}>Sequential Logic</Text>
+            <Text style={styles.logicBadgeText}>Right-Shift Logic</Text>
           </View>
         </View>
 
         <Text style={styles.bodySm}>
-          Interactive control paths. Tap any block to isolate its micro-operation in
-          the pipeline.
+          Interactive control paths. Tap any block to isolate its micro-operation in the pipeline.
         </Text>
 
         {/* Interactive Visual Flowchart */}
@@ -405,7 +450,7 @@ export default function TableScreen() {
             activeOpacity={0.8}
           >
             <Text style={styles.fcNodeSub}>INITIALIZATION</Text>
-            <Text style={styles.fcNodeMain}>A ← 0, Load M, Load Q</Text>
+            <Text style={styles.fcNodeMain}>C ← 0, A ← 0, Load M, Load Q</Text>
             <Text style={styles.fcNodeFoot}>Counter ← Bit Width (n = 4)</Text>
           </TouchableOpacity>
 
@@ -448,7 +493,7 @@ export default function TableScreen() {
               />
               <View style={styles.fcHaltBox}>
                 <Text style={styles.fcHaltTag}>HALT & OUTPUT</Text>
-                <Text style={styles.fcHaltMain}>Product = A (15)</Text>
+                <Text style={styles.fcHaltMain}>Product = A | Q (15)</Text>
               </View>
             </View>
 
@@ -499,7 +544,7 @@ export default function TableScreen() {
               activeOpacity={0.8}
             >
               <Text style={styles.fcAddTag}>YES • ADD</Text>
-              <Text style={styles.fcAddMain}>A ← A + M</Text>
+              <Text style={styles.fcAddMain}>A ← A + M, C ← Carry</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -523,15 +568,15 @@ export default function TableScreen() {
             />
           </View>
 
-          {/* Process: Shift & Decrement */}
+          {/* Process: Shift C-A-Q RIGHT & Decrement Counter */}
           <TouchableOpacity
             style={styles.fcNodeBox}
             onPress={() => setSelectedNode(FLOWCHART_NODES.shift)}
             activeOpacity={0.8}
           >
             <Text style={styles.fcNodeSub}>CLOCK CYCLE TRANSITION</Text>
-            <Text style={styles.fcNodeMain}>Q &gt;&gt; 1  |  M &lt;&lt; 1</Text>
-            <Text style={styles.fcNodeFoot}>Counter ← Counter − 1</Text>
+            <Text style={styles.fcNodeMain}>Shift C-A-Q RIGHT » 1</Text>
+            <Text style={styles.fcNodeFoot}>C → A[3], A[0] → Q[3], Counter − 1</Text>
           </TouchableOpacity>
 
           {/* Loopback Indicator */}
@@ -574,7 +619,7 @@ export default function TableScreen() {
             <View style={styles.accordionTitleRow}>
               <MaterialIcons name="memory" size={18} color={COLORS.terracotta} />
               <Text style={styles.accordionTitle}>
-                Why 8-bit registers for 4-bit numbers?
+                Why 2n bits for the final product (A-Q)?
               </Text>
             </View>
             <MaterialIcons
@@ -586,8 +631,7 @@ export default function TableScreen() {
           {openAccordions.acc1 && (
             <View style={styles.accordionBody}>
               <Text style={styles.accordionText}>
-                When multiplying two <Text style={styles.boldObsidian}>n-bit</Text>{' '}
-                binary integers, the maximum product magnitude is:
+                When multiplying two <Text style={styles.boldObsidian}>n-bit</Text> unsigned binary integers, the maximum product magnitude is:
               </Text>
               <View style={styles.formulaBox}>
                 <Text style={styles.formulaText}>
@@ -595,10 +639,7 @@ export default function TableScreen() {
                 </Text>
               </View>
               <Text style={styles.accordionText}>
-                For 4-bit numbers (max 15): 15 × 15 = 225₁₀ (11100001₂), which
-                requires exactly <Text style={styles.boldObsidian}>8 bits</Text>{' '}
-                (maximum capacity 255). An 8-bit accumulator is mathematically
-                guaranteed never to overflow!
+                For 4-bit numbers (max 15): 15 × 15 = 225₁₀ (11100001₂), which requires exactly <Text style={styles.boldObsidian}>8 bits (2n)</Text>. In the right-shift architecture, the combined registers A and Q together store the 2n-bit result: Accumulator A holds the upper n bits and Multiplier Q holds the lower n bits!
               </Text>
             </View>
           )}
@@ -614,7 +655,7 @@ export default function TableScreen() {
             <View style={styles.accordionTitleRow}>
               <MaterialIcons name="timer" size={18} color={COLORS.terracotta} />
               <Text style={styles.accordionTitle}>
-                Time Complexity: O(n) Clock Cycles
+                Time Complexity: Exactly n Clock Cycles
               </Text>
             </View>
             <MaterialIcons
@@ -627,9 +668,7 @@ export default function TableScreen() {
             <View style={styles.accordionBody}>
               <Text style={styles.accordionText}>
                 The sequential shift-and-add architecture finishes in exactly{' '}
-                <Text style={styles.boldObsidian}>n clock cycles</Text> for an n-bit
-                multiplier. Each cycle tests Q₀, optionally executes an addition in
-                the ALU, and applies synchronized left/right shifts.
+                <Text style={styles.boldObsidian}>n clock cycles</Text> for an n-bit multiplier. In each cycle: Q₀ is inspected before shifting, addition occurs only if Q₀ = 1 (with carry into C), and the combined C-A-Q registers shift right by 1 bit.
               </Text>
             </View>
           )}
@@ -657,21 +696,12 @@ export default function TableScreen() {
           {openAccordions.acc3 && (
             <View style={styles.accordionBody}>
               <Text style={styles.accordionText}>
-                • <Text style={styles.boldObsidian}>Standard Shift-and-Add</Text>:{' '}
-                Operates on unsigned integers, adding M whenever Q₀ = 1.
-              </Text>
-              <Text style={styles.accordionText}>
-                • <Text style={styles.boldObsidian}>Booth's Algorithm</Text>:{' '}
-                Natively handles signed two's complement numbers by scanning pairs of
-                adjacent bits (Qᵢ, Qᵢ₋₁) to skip contiguous blocks of 1s through
-                subtraction and addition.
+                Standard Shift-and-Add operates on unsigned binary operands by examining a single bit (Q₀) and shifting right. Booth's Algorithm handles signed 2's complement numbers directly by examining adjacent bit pairs (Q₀ and Q₋₁) to replace strings of 1s with a single addition and subtraction.
               </Text>
             </View>
           )}
         </View>
       </View>
-
-      <View style={{ height: 24 }} />
     </ScrollView>
   );
 }
@@ -683,7 +713,8 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: 16,
-    gap: 14,
+    paddingBottom: 40,
+    gap: 16,
   },
   overviewSection: {
     gap: 8,
@@ -694,71 +725,68 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   studyModuleText: {
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: '800',
     color: COLORS.terracotta,
     letterSpacing: 1,
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
   },
   overviewTitle: {
     fontSize: 20,
     fontWeight: '800',
     color: COLORS.obsidian,
-    lineHeight: 24,
-    letterSpacing: -0.3,
   },
   overviewSubtitle: {
-    fontSize: 12,
-    color: COLORS.onSurfaceVariant,
-    lineHeight: 17,
+    fontSize: 13,
+    color: COLORS.textMuted,
+    lineHeight: 18,
   },
   filterPillsRow: {
     flexDirection: 'row',
     gap: 8,
-    paddingVertical: 4,
+    paddingTop: 6,
   },
   filterPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
     gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 8,
+    borderWidth: 1.5,
   },
   filterPillActive: {
-    backgroundColor: COLORS.obsidian,
-    ...SHADOWS.hardInk,
+    backgroundColor: COLORS.cardCreamAlt,
+    borderColor: COLORS.terracotta,
   },
   filterPillInactive: {
     backgroundColor: COLORS.cardCream,
-    borderWidth: 1,
     borderColor: COLORS.cardBorder,
   },
   filterPillText: {
-    fontSize: 11,
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    fontSize: 12,
+    fontWeight: '700',
   },
   filterPillTextActive: {
-    color: COLORS.cardCream,
-    fontWeight: '800',
+    color: COLORS.terracotta,
   },
   filterPillTextInactive: {
     color: COLORS.obsidian,
-    fontWeight: '600',
   },
   card: {
     backgroundColor: COLORS.cardCream,
-    borderWidth: 1.5,
-    borderColor: COLORS.cardBorder,
     borderRadius: 16,
     padding: 16,
-    ...SHADOWS.subtleCard,
+    borderWidth: 1.5,
+    borderColor: COLORS.cardBorder,
     gap: 12,
+    ...SHADOWS.subtleCard,
   },
   cardHeaderRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 8,
   },
   dotTitleRow: {
     flexDirection: 'row',
@@ -766,113 +794,141 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   navyDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
     backgroundColor: COLORS.obsidian,
   },
   flameDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
     backgroundColor: COLORS.terracotta,
   },
   cardTitle: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '800',
     color: COLORS.obsidian,
   },
   matrixBadge: {
-    backgroundColor: COLORS.surfaceHigh,
+    backgroundColor: COLORS.cardCreamAlt,
     borderWidth: 1,
     borderColor: COLORS.cardBorder,
     paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 12,
+    paddingVertical: 4,
+    borderRadius: 6,
   },
   matrixBadgeText: {
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: '800',
     color: COLORS.obsidian,
     fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
   },
   logicBadge: {
-    backgroundColor: 'rgba(245, 79, 27, 0.1)',
-    borderWidth: 1,
-    borderColor: 'rgba(245, 79, 27, 0.3)',
+    backgroundColor: COLORS.terracotta,
     paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 12,
+    paddingVertical: 4,
+    borderRadius: 6,
   },
   logicBadgeText: {
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: '800',
-    color: COLORS.terracotta,
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    color: COLORS.white,
   },
   bodySm: {
     fontSize: 12,
-    color: COLORS.onSurfaceVariant,
-    lineHeight: 16,
+    color: COLORS.textMuted,
+    lineHeight: 17,
   },
   tableScroll: {
+    marginTop: 4,
+  },
+  table: {
     borderWidth: 1,
     borderColor: COLORS.cardBorder,
     borderRadius: 10,
     overflow: 'hidden',
-  },
-  table: {
-    backgroundColor: COLORS.cardCream,
-    minWidth: 520,
+    backgroundColor: COLORS.pageBg,
   },
   tableHeaderRow: {
     flexDirection: 'row',
     backgroundColor: COLORS.obsidian,
     paddingVertical: 8,
-    paddingHorizontal: 6,
+    paddingHorizontal: 10,
+    alignItems: 'center',
   },
   thCell: {
-    color: COLORS.cardCream,
     fontSize: 11,
     fontWeight: '800',
-    letterSpacing: 0.5,
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    color: COLORS.cardCream,
   },
   thCellCenter: {
-    color: COLORS.cardCream,
     fontSize: 11,
     fontWeight: '800',
+    color: COLORS.cardCream,
     textAlign: 'center',
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
   },
   tableRow: {
     flexDirection: 'row',
     paddingVertical: 8,
-    paddingHorizontal: 6,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.cardBorder,
+    paddingHorizontal: 10,
     alignItems: 'center',
+    borderTopWidth: 1,
+    borderTopColor: COLORS.cardBorder,
+  },
+  tableRowHighlight: {
+    backgroundColor: 'rgba(245, 79, 27, 0.08)',
   },
   tableRowNormal: {
     backgroundColor: COLORS.cardCream,
   },
-  tableRowHighlight: {
-    backgroundColor: 'rgba(242, 228, 204, 0.7)',
-  },
   tdCell: {
     fontSize: 11,
-    color: COLORS.onSurfaceVariant,
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-  },
-  tdCode: {
-    fontSize: 11,
-    color: COLORS.obsidian,
     fontWeight: '700',
+    color: COLORS.obsidian,
+  },
+  tdCodeCenter: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: COLORS.obsidian,
+    textAlign: 'center',
     fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
   },
   tdCellCenter: {
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  q0FlamePill: {
+    backgroundColor: COLORS.terracotta,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  q0FlameText: {
+    color: COLORS.white,
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  q0MutedPill: {
+    backgroundColor: COLORS.cardCreamAlt,
+    borderWidth: 1,
+    borderColor: COLORS.cardBorder,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  q0MutedText: {
+    color: COLORS.textMuted,
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  tdCellMuted: {
+    fontSize: 11,
+    color: COLORS.textMuted,
   },
   tdCellRow: {
     flexDirection: 'row',
@@ -880,135 +936,93 @@ const styles = StyleSheet.create({
   },
   tdOpText: {
     fontSize: 11,
-    color: COLORS.onSurfaceVariant,
-  },
-  tdCellMuted: {
     color: COLORS.textMuted,
-    fontSize: 11,
-  },
-  decNote: {
-    fontSize: 10,
-    color: COLORS.textMuted,
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-  },
-  q0FlamePill: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: COLORS.terracotta,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  q0FlameText: {
-    color: COLORS.white,
-    fontSize: 11,
-    fontWeight: '900',
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-  },
-  q0MutedPill: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: COLORS.surfaceHigh,
-    borderWidth: 1,
-    borderColor: COLORS.cardBorder,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  q0MutedText: {
-    color: COLORS.obsidian,
-    fontSize: 11,
-    fontWeight: '700',
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
   },
   bannerNavy: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
+    gap: 12,
     backgroundColor: COLORS.obsidian,
     borderRadius: 12,
-    padding: 12,
-    gap: 10,
-    borderWidth: 1,
-    borderColor: COLORS.primaryContainer,
-    ...SHADOWS.hardInk,
+    padding: 14,
+    marginTop: 4,
   },
   bannerTitle: {
-    color: COLORS.cardCream,
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '800',
+    color: COLORS.cardCream,
   },
   bannerSubtitle: {
-    color: COLORS.cardBorder,
-    fontSize: 11,
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    fontSize: 12,
+    color: 'rgba(250, 243, 232, 0.8)',
   },
   flowchartTree: {
     alignItems: 'center',
+    paddingVertical: 10,
     gap: 2,
-    paddingVertical: 4,
   },
   fcStartNode: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.obsidian,
+    gap: 8,
+    backgroundColor: COLORS.cardCreamAlt,
+    borderWidth: 1.5,
+    borderColor: COLORS.terracotta,
     paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    gap: 6,
-    ...SHADOWS.hardInk,
+    paddingVertical: 10,
+    borderRadius: 24,
+    ...SHADOWS.hardFlame,
   },
   fcStartText: {
-    color: COLORS.cardCream,
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '800',
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    color: COLORS.obsidian,
+    letterSpacing: 1,
   },
   arrowCol: {
     alignItems: 'center',
+    height: 20,
   },
   arrowLine: {
     width: 2,
-    height: 14,
-    backgroundColor: COLORS.cardBorder,
+    height: 10,
+    backgroundColor: COLORS.obsidian,
   },
   fcNodeBox: {
-    width: 240,
-    backgroundColor: COLORS.cardCream,
-    borderWidth: 2,
+    width: '90%',
+    backgroundColor: COLORS.cardCreamAlt,
+    borderWidth: 1.5,
     borderColor: COLORS.cardBorder,
     borderRadius: 12,
     padding: 10,
     alignItems: 'center',
     gap: 2,
-    ...SHADOWS.subtleCard,
   },
   fcNodeSub: {
     fontSize: 9,
     fontWeight: '800',
     color: COLORS.terracotta,
-    letterSpacing: 0.8,
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    letterSpacing: 1,
   },
   fcNodeMain: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '800',
     color: COLORS.obsidian,
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    textAlign: 'center',
   },
   fcNodeFoot: {
-    fontSize: 10,
-    color: COLORS.onSurfaceVariant,
+    fontSize: 11,
+    color: COLORS.textMuted,
   },
   fcDecisionBox: {
-    width: 240,
-    backgroundColor: COLORS.surfaceHigh,
-    borderWidth: 2,
-    borderColor: COLORS.obsidian,
-    borderRadius: 14,
+    width: '90%',
+    backgroundColor: COLORS.pageBg,
+    borderWidth: 1.5,
+    borderColor: COLORS.terracotta,
+    borderRadius: 12,
     padding: 10,
     alignItems: 'center',
     gap: 2,
-    ...SHADOWS.subtleCard,
   },
   fcDecisionTagRow: {
     flexDirection: 'row',
@@ -1019,8 +1033,7 @@ const styles = StyleSheet.create({
     fontSize: 9,
     fontWeight: '800',
     color: COLORS.terracotta,
-    letterSpacing: 0.8,
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    letterSpacing: 1,
   },
   fcDecisionMain: {
     fontSize: 13,
@@ -1028,150 +1041,133 @@ const styles = StyleSheet.create({
     color: COLORS.obsidian,
   },
   fcDecisionFoot: {
-    fontSize: 10,
-    color: COLORS.onSurfaceVariant,
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    fontSize: 11,
+    color: COLORS.textMuted,
   },
   branchRow: {
-    width: 240,
     flexDirection: 'row',
+    width: '90%',
     justifyContent: 'space-between',
-    paddingTop: 2,
+    paddingHorizontal: 10,
   },
   branchCol: {
     alignItems: 'center',
-    width: 110,
+    width: '45%',
   },
   branchYesText: {
     fontSize: 10,
     fontWeight: '800',
     color: COLORS.terracotta,
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
   },
   branchNoText: {
     fontSize: 10,
     fontWeight: '800',
     color: COLORS.obsidian,
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
   },
   branchLineFlame: {
     width: 2,
-    height: 12,
+    height: 10,
     backgroundColor: COLORS.terracotta,
   },
   branchLineNavy: {
     width: 2,
-    height: 12,
+    height: 10,
     backgroundColor: COLORS.obsidian,
   },
   fcHaltBox: {
     backgroundColor: COLORS.obsidian,
-    borderRadius: 10,
     padding: 8,
+    borderRadius: 8,
     alignItems: 'center',
     width: '100%',
-    gap: 2,
   },
   fcHaltTag: {
-    fontSize: 8,
-    fontWeight: '900',
+    fontSize: 9,
+    fontWeight: '800',
     color: COLORS.terracotta,
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
   },
   fcHaltMain: {
     fontSize: 11,
     fontWeight: '800',
-    color: COLORS.white,
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    color: COLORS.cardCream,
   },
   fcContinueBox: {
-    backgroundColor: COLORS.cardCream,
-    borderWidth: 2,
-    borderColor: COLORS.obsidian,
-    borderRadius: 10,
+    backgroundColor: COLORS.cardCreamAlt,
+    borderWidth: 1,
+    borderColor: COLORS.cardBorder,
     padding: 8,
+    borderRadius: 8,
     alignItems: 'center',
     width: '100%',
-    gap: 2,
   },
   fcContinueTag: {
-    fontSize: 8,
-    fontWeight: '900',
-    color: COLORS.terracotta,
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    fontSize: 9,
+    fontWeight: '800',
+    color: COLORS.obsidian,
   },
   fcContinueMain: {
     fontSize: 11,
-    fontWeight: '800',
+    fontWeight: '700',
     color: COLORS.obsidian,
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
   },
   splitRow: {
-    width: 240,
     flexDirection: 'row',
+    width: '90%',
     justifyContent: 'space-between',
     gap: 8,
   },
   fcAddBox: {
     flex: 1,
-    backgroundColor: COLORS.cardCream,
-    borderWidth: 2,
-    borderColor: COLORS.terracotta,
-    borderRadius: 10,
+    backgroundColor: COLORS.terracotta,
     padding: 8,
+    borderRadius: 8,
     alignItems: 'center',
-    gap: 2,
   },
   fcAddTag: {
     fontSize: 9,
     fontWeight: '800',
-    color: COLORS.terracotta,
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    color: COLORS.white,
   },
   fcAddMain: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '800',
-    color: COLORS.obsidian,
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    color: COLORS.white,
   },
   fcBypassBox: {
     flex: 1,
-    backgroundColor: COLORS.cardCream,
+    backgroundColor: COLORS.cardCreamAlt,
     borderWidth: 1,
     borderColor: COLORS.cardBorder,
-    borderRadius: 10,
     padding: 8,
+    borderRadius: 8,
     alignItems: 'center',
-    gap: 2,
   },
   fcBypassTag: {
     fontSize: 9,
     fontWeight: '800',
     color: COLORS.textMuted,
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
   },
   fcBypassMain: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: COLORS.textMuted,
+    fontSize: 11,
+    fontWeight: '700',
+    color: COLORS.obsidian,
   },
   loopbackPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.surfaceHigh,
+    gap: 6,
+    backgroundColor: COLORS.cardCreamAlt,
     borderWidth: 1,
     borderColor: COLORS.cardBorder,
     paddingHorizontal: 12,
-    paddingVertical: 5,
-    borderRadius: 20,
-    gap: 6,
-    marginTop: 6,
+    paddingVertical: 6,
+    borderRadius: 16,
+    marginTop: 8,
   },
   loopbackText: {
     fontSize: 10,
     fontWeight: '700',
     color: COLORS.obsidian,
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
   },
   nodeDetailDrawer: {
     backgroundColor: COLORS.cardCreamAlt,
@@ -1179,7 +1175,7 @@ const styles = StyleSheet.create({
     borderColor: COLORS.terracotta,
     borderRadius: 12,
     padding: 12,
-    gap: 4,
+    gap: 6,
     marginTop: 8,
   },
   nodeDetailHeader: {
@@ -1188,22 +1184,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   nodeDetailTitle: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '800',
-    color: COLORS.terracotta,
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-    flex: 1,
+    color: COLORS.obsidian,
   },
   nodeDetailDesc: {
-    fontSize: 11,
-    color: COLORS.obsidian,
-    lineHeight: 16,
+    fontSize: 12,
+    color: COLORS.textMuted,
+    lineHeight: 17,
   },
   accordionContainer: {
-    backgroundColor: COLORS.cardCreamAlt,
     borderWidth: 1,
     borderColor: COLORS.cardBorder,
-    borderRadius: 12,
+    borderRadius: 10,
     overflow: 'hidden',
   },
   accordionHeader: {
@@ -1211,6 +1204,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     padding: 12,
+    backgroundColor: COLORS.cardCreamAlt,
   },
   accordionTitleRow: {
     flexDirection: 'row',
@@ -1222,35 +1216,33 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '800',
     color: COLORS.obsidian,
-    flex: 1,
   },
   accordionBody: {
-    paddingHorizontal: 12,
-    paddingBottom: 12,
+    padding: 12,
+    backgroundColor: COLORS.cardCream,
     gap: 8,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.cardBorder,
   },
   accordionText: {
     fontSize: 12,
-    color: COLORS.onSurfaceVariant,
-    lineHeight: 17,
+    color: COLORS.textMuted,
+    lineHeight: 18,
+  },
+  formulaBox: {
+    backgroundColor: COLORS.obsidian,
+    padding: 8,
+    borderRadius: 6,
+    alignItems: 'center',
+  },
+  formulaText: {
+    color: COLORS.terracotta,
+    fontSize: 13,
+    fontWeight: '800',
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
   },
   boldObsidian: {
     color: COLORS.obsidian,
     fontWeight: '800',
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-  },
-  formulaBox: {
-    backgroundColor: COLORS.cardCream,
-    borderWidth: 1,
-    borderColor: COLORS.cardBorder,
-    borderRadius: 8,
-    padding: 8,
-    alignItems: 'center',
-  },
-  formulaText: {
-    fontSize: 12,
-    fontWeight: '800',
-    color: COLORS.terracotta,
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
   },
 });

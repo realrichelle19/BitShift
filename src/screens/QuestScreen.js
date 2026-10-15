@@ -394,6 +394,15 @@ export default function QuestScreen({ playerName = 'Student', onNavigateToHome }
       {currentQuestion && currentQuestion.registers && (
         <View style={styles.registerStateBox}>
           <Text style={styles.regStateTitle}>HARDWARE REGISTER CONTEXT</Text>
+          {currentQuestion.registers.c !== undefined && (
+            <View style={styles.regStateRow}>
+              <View style={styles.regStateLeft}>
+                <Text style={[styles.regStateLetter, { color: COLORS.terracotta }]}>C</Text>
+                <Text style={styles.regStateDesc}>Carry</Text>
+              </View>
+              <Text style={styles.regStateBits}>{currentQuestion.registers.c}</Text>
+            </View>
+          )}
           <View style={styles.regStateRow}>
             <View style={styles.regStateLeft}>
               <Text style={styles.regStateLetter}>A</Text>
